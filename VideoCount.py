@@ -35,8 +35,8 @@ areaTH = frameArea/250
 print('Area Threshold: ', areaTH)
 
 # Entry / exit lines
-line_up = int(2*(h/5))
-line_down = int(3*(h/5))
+line_up = int(2*(h/5)-50)
+line_down = int(3*(h/5)+50)
 
 up_limit = int(1*(h/5))
 down_limit = int(4*(h/5))
