@@ -1,0 +1,15 @@
+ultralytics==8.0.192
+supervision==0.14.0
+opencv-python==4.8.0.76
+numpy>=1.23.0
+matplotlib>=3.5.0
+
+# tracking (dipakai bersama YOLO)
+filterpy==1.4.5
+scipy>=1.10.0
+
+# untuk REST API sederhana untuk integrasi backend
+Flask==2.3.2
+
+# kalau perlu logging / tools tambahan
+tqdm
