@@ -1,4 +1,4 @@
-# Nama file: single_line_crowd_counter_v2.py
+# Nama file: complete_crowd_counter_with_id.py (Sudah dimodifikasi)
 
 import numpy as np
 import cv2
@@ -7,6 +7,7 @@ import argparse
 import datetime
 import sys
 from random import randint
+import os # Baris baru untuk mengimpor pustaka os
 
 # ====================================================================
 # KONTEN DARI Utility.py
@@ -96,9 +97,18 @@ x_end = int(w_full * 0.8)
 w_roi = x_end - x_start
 h_roi = y_end - y_start
 
+# ====================================================================
+# BARIS KODE BARU: MEMBUAT FOLDER 'result'
+# ====================================================================
+output_folder = 'result'
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
+# ====================================================================
+
 fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-out_original = cv2.VideoWriter('output_original.mp4', fourcc, fps, (w_full, h_full))
-out_masked = cv2.VideoWriter('output_masked.mp4', fourcc, fps, (w_roi, h_roi))
+# MENGUBAH PATH PENYIMPANAN VIDEO
+out_original = cv2.VideoWriter(os.path.join(output_folder, 'output_original.mp4'), fourcc, fps, (w_full, h_full))
+out_masked = cv2.VideoWriter(os.path.join(output_folder, 'output_masked.mp4'), fourcc, fps, (w_roi, h_roi))
 
 total_people = 0
 frameArea = h_roi * w_roi
@@ -120,7 +130,7 @@ kernelCl = np.ones((11, 11), np.uint8)
 
 font = cv2.FONT_HERSHEY_SIMPLEX
 persons = []
-max_p_age = 5
+max_p_age = 15
 pid = 1
 
 while cap.isOpened():
@@ -160,7 +170,6 @@ while cap.isOpened():
                         new = False
                         i.updateCoords(cx, cy)
                         
-                        # LOGIKA PENHITUNGAN MASUK/KELUAR
                         if len(i.getTracks()) >= 2:
                             prev_y = i.getTracks()[-2][1]
                             curr_y = i.getTracks()[-1][1]
@@ -170,7 +179,6 @@ while cap.isOpened():
                                 print("ID:", i.getId(), 'masuk, total:', total_people)
                             elif prev_y > line_main and curr_y <= line_main:
                                 total_people -= 1
-                                # PASTIKAN JUMLAH TIDAK NEGATIF
                                 total_people = max(0, total_people)
                                 print("ID:", i.getId(), 'keluar, total:', total_people)
                         
@@ -181,7 +189,8 @@ while cap.isOpened():
                 persons.append(p)
                 pid += 1
             cv2.circle(frame_roi, (cx, cy), 5, (0, 0, 255), -1)
-            img = cv2.rectangle(frame_roi, (x, y), (x+w, y+h), (0, 255, 0), 2)
+            cv2.putText(frame_roi, f'ID: {p.getId()}', (x, y - 10), font, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+            cv2.rectangle(frame_roi, (x, y), (x+w, y+h), (0, 255, 0), 2)
 
     for i in persons:
         if args["status"] == 'True':
