@@ -34,16 +34,8 @@ def main(source_video_path):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out_video = cv2.VideoWriter(os.path.join(output_folder, 'output_yolo.mp4'), fourcc, fps, (w_full, h_full))
 
-    # Definisi zona dan garis penghitungan (satu garis di tengah)
-    LINE_START = sv.Point(0, h_full // 2)
-    LINE_END = sv.Point(w_full, h_full // 2)
-
     # Inisialisasi pelacakan (ByteTrack lebih canggih)
     byte_tracker = sv.ByteTrack()
-    
-    # PERBAIKAN: Cara memanggil LineZone yang benar
-    line_zone = sv.LineZone(start=LINE_START, end=LINE_END)
-    line_zone_annotator = sv.LineZoneAnnotator(thickness=2, text_thickness=1, text_scale=0.5)
     box_annotator = sv.BoxAnnotator(thickness=2)
 
     # 2. PROSES - Loop Utama
@@ -56,10 +48,14 @@ def main(source_video_path):
         detections = sv.Detections.from_ultralytics(results)
         detections = detections[detections.class_id == 0]
         detections = byte_tracker.update_with_detections(detections)
-        line_zone.trigger(detections)
+        
+        # Hitung jumlah orang secara langsung
+        people_count = len(detections)
 
+        # Visualisasi
         frame = box_annotator.annotate(scene=frame, detections=detections)
-        frame = line_zone_annotator.annotate(frame, line_zone)
+        cv2.putText(frame, f'Jumlah Orang: {people_count}', (10, 30), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2, cv2.LINE_AA)
 
         cv2.imshow("YOLO Crowd Counter", frame)
         out_video.write(frame)
