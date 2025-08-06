@@ -199,7 +199,7 @@ while cap.isOpened():
                 pts = pts.reshape((-1, 1, 2))
                 frame_roi = cv2.polylines(frame_roi, [pts], False, i.getRGB())
 
-    str_total = 'Jumlah Total: ' + str(total_people)
+    str_total = 'Jumlah Orang Masuk: ' + str(total_people)
 
     frame_roi = cv2.polylines(frame_roi, [pts_L1], False, line_main_color, thickness=2)
 
