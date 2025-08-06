@@ -5,13 +5,9 @@ import argparse
 from ultralytics import YOLO
 import supervision as sv
 
-def main(source_video_path):
-    # 1. SETUP - Inisialisasi Model, Video, dan Tracker
-    
-    # Inisialisasi model YOLOv8 (akan mengunduh jika belum ada)
+def main(source_video_path):    
     model = YOLO("yolov8n.pt") 
     
-    # Menggunakan kamera real-time jika tidak ada path video yang diberikan
     if source_video_path:
         cap = cv2.VideoCapture(source_video_path)
     else:
@@ -25,7 +21,6 @@ def main(source_video_path):
     w_full = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h_full = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    # Menyiapkan video writer untuk menyimpan output
     output_folder = 'yolo_results'
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
@@ -34,11 +29,9 @@ def main(source_video_path):
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')
     out_video = cv2.VideoWriter(os.path.join(output_folder, 'output_yolo.mp4'), fourcc, fps, (w_full, h_full))
 
-    # Inisialisasi pelacakan (ByteTrack lebih canggih)
     byte_tracker = sv.ByteTrack()
     box_annotator = sv.BoxAnnotator(thickness=2)
 
-    # 2. PROSES - Loop Utama
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -63,7 +56,6 @@ def main(source_video_path):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
-    # 3. CLEANUP - Akhir Program
     cap.release()
     out_video.release()
     cv2.destroyAllWindows()
