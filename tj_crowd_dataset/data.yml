@@ -1,0 +1,7 @@
+# Nama file: data.yaml
+train: ../tj_crowd_dataset/images/train/
+val: ../tj_crowd_dataset/images/val/
+
+# Nama kelas yang akan dideteksi
+names:
+  0: person
