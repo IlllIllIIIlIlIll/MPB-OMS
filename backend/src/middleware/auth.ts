@@ -1,106 +1,84 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import prisma from '../lib/prisma';
 
-interface AuthRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    role: string;
-  };
-}
+// Simple in-memory user store (in production, use a database)
+const users = [
+  {
+    id: '1',
+    email: 'admin@tj-oms.com',
+    name: 'System Administrator',
+    role: 'ADMIN'
+  },
+  {
+    id: '2',
+    email: 'operator@tj-oms.com',
+    name: 'TransJakarta Operator',
+    role: 'OPERATOR'
+  }
+];
 
-export const authenticateToken = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const authenticateToken = (req: Request, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    res.status(401).json({ error: 'Access token required' });
+    return;
+  }
+
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
-
-    if (!token) {
-      return res.status(401).json({ 
-        error: 'Access token required',
-        message: 'Please provide a valid authentication token'
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+    const user = users.find(u => u.id === decoded.userId);
     
-    // Check if session exists and is valid
-    const session = await prisma.session.findFirst({
-      where: {
-        token,
-        expiresAt: {
-          gt: new Date()
-        }
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            email: true,
-            role: true,
-            isActive: true
-          }
-        }
-      }
-    });
-
-    if (!session || !session.user.isActive) {
-      return res.status(401).json({ 
-        error: 'Invalid or expired session',
-        message: 'Please log in again'
-      });
+    if (!user) {
+      res.status(401).json({ error: 'Invalid token' });
+      return;
     }
 
-    req.user = {
-      id: session.user.id,
-      email: session.user.email,
-      role: session.user.role
-    };
-
+    (req as any).user = user;
     next();
   } catch (error) {
-    if (error instanceof jwt.JsonWebTokenError) {
-      return res.status(401).json({ 
-        error: 'Invalid token',
-        message: 'The provided token is invalid'
-      });
-    }
-    
-    if (error instanceof jwt.TokenExpiredError) {
-      return res.status(401).json({ 
-        error: 'Token expired',
-        message: 'The provided token has expired'
-      });
-    }
-
-    console.error('Auth middleware error:', error);
-    return res.status(500).json({ 
-      error: 'Authentication error',
-      message: 'An error occurred during authentication'
-    });
+    res.status(403).json({ error: 'Invalid token' });
+    return;
   }
 };
 
 export const requireRole = (roles: string[]) => {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.user) {
-      return res.status(401).json({ 
-        error: 'Authentication required',
-        message: 'Please log in to access this resource'
-      });
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = (req as any).user;
+    
+    if (!user) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        error: 'Insufficient permissions',
-        message: 'You do not have permission to access this resource'
-      });
+    if (!roles.includes(user.role)) {
+      res.status(403).json({ error: 'Insufficient permissions' });
+      return;
     }
 
     next();
   };
+};
+
+export const requireAdmin = requireRole(['ADMIN']);
+export const requireOperator = requireRole(['OPERATOR', 'ADMIN']);
+export const requireViewer = requireRole(['VIEWER', 'OPERATOR', 'ADMIN']);
+
+export const generateToken = (userId: string, email: string, role: string): string => {
+  return jwt.sign(
+    { userId, email, role },
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: '24h' }
+  );
+};
+
+export const hashPassword = async (password: string): Promise<string> => {
+  const bcrypt = await import('bcryptjs');
+  return await bcrypt.hash(password, 12);
+};
+
+export const verifyPassword = async (password: string, hashedPassword: string): Promise<boolean> => {
+  const bcrypt = await import('bcryptjs');
+  return await bcrypt.compare(password, hashedPassword);
 }; 

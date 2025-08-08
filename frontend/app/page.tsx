@@ -1,509 +1,379 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Card, CardContent } from "@/components/ui/Card"
+import { Progress } from "@/components/ui/Progress"
 import Badge from "@/components/ui/Badge"
 import Button from "@/components/ui/Button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card"
-import { Progress } from "@/components/ui/Progress"
-import { Separator } from "@/components/ui/Separator"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs"
-import {
-  Activity,
-  ArrowDown,
-  ArrowUp,
-  Camera,
-  Database,
-  Users,
-  Wifi,
-  WifiOff,
-  AlertTriangle,
-  CheckCircle,
-  Clock,
-  TrendingUp,
-  Eye,
-  EyeOff,
+import { 
+  Bus, 
+  Users, 
+  Clock, 
+  Wifi, 
+  WifiOff, 
   RefreshCw,
-  Power,
+  TrendingUp,
+  TrendingDown,
+  Activity
 } from "lucide-react"
 
-// Core data types for the passenger counting system
-interface PassengerData {
-  timestamp: string
-  in: number
-  out: number
-  occupancy: number
+interface OccupancyData {
+  busId: string
+  busCode: string
+  routeId?: string
   capacity: number
+  occupancy: number
+  inCount: number
+  outCount: number
+  updatedAt: string
+  deviceId?: string
+  providerName: string
+  category: string
 }
 
 interface SystemStatus {
-  camera: "online" | "offline" | "error"
-  erp: "connected" | "disconnected" | "syncing"
-  localFallback: boolean
-  lastSync: string
+  connected: boolean
+  lastUpdate: string
+  totalBuses: number
+  activeBuses: number
 }
 
-interface PassengerMovement {
-  id: string
-  type: "in" | "out"
-  timestamp: string
-}
-
-export default function PassengerCountingDashboard() {
-  // Core state for passenger counting system
-  const [currentData, setCurrentData] = useState<PassengerData>({
-    timestamp: new Date().toISOString(),
-    in: 0,
-    out: 0,
-    occupancy: 0,
-    capacity: 40,
-  })
-
+export default function OMSDashboard() {
+  const [selectedBus, setSelectedBus] = useState<OccupancyData | null>(null)
+  const [allBuses, setAllBuses] = useState<OccupancyData[]>([])
   const [systemStatus, setSystemStatus] = useState<SystemStatus>({
-    camera: "online",
-    erp: "connected",
-    localFallback: false,
-    lastSync: new Date().toISOString(),
+    connected: true,
+    lastUpdate: new Date().toISOString(),
+    totalBuses: 0,
+    activeBuses: 0
   })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const [recentMovements, setRecentMovements] = useState<PassengerMovement[]>([])
-  const [isCameraActive, setIsCameraActive] = useState(true)
+  // Fetch occupancy data
+  const fetchOccupancyData = async () => {
+    try {
+      setIsLoading(true)
+      setError(null)
+      
+      const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/occupancy/now`
+      console.log('🔍 Fetching from:', apiUrl)
+      
+      const response = await fetch(apiUrl, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`
+        }
+      })
 
-  // Simulate real-time passenger detection and counting
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Simulate passenger movement detection (30% chance every 3 seconds)
-      const movement = Math.random() > 0.7 ? (Math.random() > 0.5 ? "in" : "out") : null
+      console.log('📡 Response status:', response.status)
+      console.log('📡 Response headers:', response.headers)
 
-      if (movement && isCameraActive) {
-        setCurrentData((prev) => {
-          const newIn = movement === "in" ? prev.in + 1 : prev.in
-          const newOut = movement === "out" ? prev.out + 1 : prev.out
-          const newOccupancy = Math.max(0, Math.min(prev.capacity, newIn - newOut))
-
-          return {
-            ...prev,
-            in: newIn,
-            out: newOut,
-            occupancy: newOccupancy,
-            timestamp: new Date().toISOString(),
-          }
-        })
-
-        // Add to recent movements log
-        setRecentMovements((prev) => [
-          {
-            id: Date.now().toString(),
-            type: movement,
-            timestamp: new Date().toISOString(),
-          },
-          ...prev.slice(0, 9), // Keep last 10 movements
-        ])
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('❌ API Error:', response.status, errorText)
+        throw new Error(`Failed to fetch occupancy data: ${response.status} - ${errorText}`)
       }
 
-      // Simulate ERP connection status changes (5% chance)
-      if (Math.random() > 0.95) {
-        setSystemStatus((prev) => ({
-          ...prev,
-          erp: prev.erp === "connected" ? "disconnected" : "connected",
-          localFallback: prev.erp === "connected", // Enable fallback when ERP disconnects
-          lastSync: prev.erp === "connected" ? prev.lastSync : new Date().toISOString(),
-        }))
+      const data: any = await response.json()
+      console.log('📊 Received data:', data)
+      
+      // Handle both array and object with buses property
+      const buses = Array.isArray(data) ? data : (data.buses || [])
+      console.log('🚌 Processed buses:', buses)
+      
+      // Transform data to match expected format
+      const transformedBuses: OccupancyData[] = buses.map((bus: any) => ({
+        busId: bus.busId || bus.bus_id || 'UNKNOWN',
+        busCode: bus.busCode || bus.busId || bus.bus_id || 'UNKNOWN',
+        routeId: bus.routeId || `ROUTE-${bus.busId || bus.bus_id}`,
+        capacity: bus.capacity || 40,
+        occupancy: bus.occupancy || 0,
+        inCount: bus.inCount || Math.floor((bus.occupancy || 0) * 0.6),
+        outCount: bus.outCount || Math.floor((bus.occupancy || 0) * 0.4),
+        updatedAt: bus.updatedAt || bus.updated_at || new Date().toISOString(),
+        deviceId: bus.deviceId || bus.device_id,
+        providerName: bus.providerName || 'TransJakarta',
+        category: bus.category || 'Regular'
+      }))
+      
+      console.log('✅ Transformed buses:', transformedBuses)
+      setAllBuses(transformedBuses)
+      
+      // Auto-select the bus with highest occupancy if none selected
+      if (!selectedBus && transformedBuses.length > 0) {
+        const highestOccupancy = transformedBuses.reduce((prev, current) => 
+          (current.occupancy / current.capacity) > (prev.occupancy / prev.capacity) ? current : prev
+        )
+        setSelectedBus(highestOccupancy)
       }
-    }, 3000)
 
-    return () => clearInterval(interval)
-  }, [isCameraActive])
-
-  const occupancyPercentage = (currentData.occupancy / currentData.capacity) * 100
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "online":
-      case "connected":
-        return "bg-green-500"
-      case "syncing":
-        return "bg-yellow-500"
-      case "offline":
-      case "disconnected":
-      case "error":
-        return "bg-red-500"
-      default:
-        return "bg-gray-500"
-    }
-  }
-
-  const getStatusIcon = (type: "camera" | "erp") => {
-    if (type === "camera") {
-      return systemStatus.camera === "online" ? <Camera className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />
-    }
-    return systemStatus.erp === "connected" ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />
-  }
-
-  const handleSystemAction = (action: string) => {
-    switch (action) {
-      case "diagnostics":
-        console.log("Running system diagnostics...")
-        break
-      case "erp-sync":
-        setSystemStatus(prev => ({ ...prev, erp: "syncing" }))
-        setTimeout(() => setSystemStatus(prev => ({ ...prev, erp: "connected" })), 2000)
-        break
-      case "restart-camera":
-        setIsCameraActive(false)
-        setTimeout(() => setIsCameraActive(true), 3000)
-        break
-      case "emergency-reset":
-        setCurrentData({
-          timestamp: new Date().toISOString(),
-          in: 0,
-          out: 0,
-          occupancy: 0,
+      setSystemStatus({
+        connected: true,
+        lastUpdate: new Date().toISOString(),
+        totalBuses: transformedBuses.length,
+        activeBuses: transformedBuses.filter(bus => bus.occupancy > 0).length
+      })
+    } catch (err) {
+      console.error('💥 Fetch error:', err)
+      setError(err instanceof Error ? err.message : 'Unknown error')
+      setSystemStatus(prev => ({ ...prev, connected: false }))
+      
+      // Add fallback data for demonstration
+      const fallbackData: OccupancyData[] = [
+        {
+          busId: 'BUS001',
+          busCode: 'BUS001',
+          routeId: 'ROUTE-BUS001',
           capacity: 40,
-        })
-        setRecentMovements([])
-        break
+          occupancy: 25,
+          inCount: 15,
+          outCount: 10,
+          updatedAt: new Date().toISOString(),
+          deviceId: 'DEV001',
+          providerName: 'TransJakarta',
+          category: 'Regular'
+        },
+        {
+          busId: 'BUS002',
+          busCode: 'BUS002',
+          routeId: 'ROUTE-BUS002',
+          capacity: 40,
+          occupancy: 35,
+          inCount: 21,
+          outCount: 14,
+          updatedAt: new Date().toISOString(),
+          deviceId: 'DEV002',
+          providerName: 'TransJakarta',
+          category: 'Regular'
+        },
+        {
+          busId: 'BUS003',
+          busCode: 'BUS003',
+          routeId: 'ROUTE-BUS003',
+          capacity: 40,
+          occupancy: 15,
+          inCount: 9,
+          outCount: 6,
+          updatedAt: new Date().toISOString(),
+          deviceId: 'DEV003',
+          providerName: 'TransJakarta',
+          category: 'Regular'
+        }
+      ]
+      
+      console.log('🔄 Using fallback data:', fallbackData)
+      setAllBuses(fallbackData)
+      if (!selectedBus) {
+        setSelectedBus(fallbackData[1]) // Select BUS002 as it has highest occupancy
+      }
+    } finally {
+      setIsLoading(false)
     }
+  }
+
+  // Initial load and periodic refresh
+  useEffect(() => {
+    fetchOccupancyData()
+    
+    const interval = setInterval(fetchOccupancyData, 10000) // Refresh every 10 seconds
+    
+    return () => clearInterval(interval)
+  }, [])
+
+  // Update selected bus when allBuses changes
+  useEffect(() => {
+    if (allBuses.length > 0 && !selectedBus) {
+      const highestOccupancy = allBuses.reduce((prev, current) => 
+        (current.occupancy / current.capacity) > (prev.occupancy / prev.capacity) ? current : prev
+      )
+      setSelectedBus(highestOccupancy)
+    }
+  }, [allBuses, selectedBus])
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+          <p className="text-muted-foreground">Loading occupancy data...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <WifiOff className="h-8 w-8 mx-auto mb-4 text-red-500" />
+          <p className="text-red-500 mb-4">{error}</p>
+          <Button onClick={fetchOccupancyData}>Retry</Button>
+        </div>
+      </div>
+    )
+  }
+
+  const occupancyPercentage = selectedBus ? (selectedBus.occupancy / selectedBus.capacity) * 100 : 0
+
+  const getOccupancyColor = (percentage: number) => {
+    if (percentage >= 90) return 'text-red-600'
+    if (percentage >= 75) return 'text-orange-600'
+    if (percentage >= 50) return 'text-yellow-600'
+    return 'text-green-600'
+  }
+
+  const getOccupancyBgColor = (percentage: number) => {
+    if (percentage >= 90) return 'bg-red-50 border-red-200'
+    if (percentage >= 75) return 'bg-orange-50 border-orange-200'
+    if (percentage >= 50) return 'bg-yellow-50 border-yellow-200'
+    return 'bg-green-50 border-green-200'
   }
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-6">
-      <div className="mx-auto max-w-7xl space-y-6">
+    <div className="min-h-screen bg-background p-4">
+      <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Passenger Counting System</h1>
-            <p className="text-muted-foreground">Real-time occupancy monitoring and ERP integration</p>
+            <h1 className="text-3xl font-bold tracking-tight">TransJakarta OMS</h1>
+            <p className="text-muted-foreground">Occupancy Management System</p>
           </div>
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${getStatusColor(systemStatus.camera)}`} />
-              {getStatusIcon("camera")}
-              <span className="text-sm font-medium capitalize">{systemStatus.camera}</span>
+              <div className={`h-2 w-2 rounded-full ${systemStatus.connected ? 'bg-green-500' : 'bg-red-500'}`} />
+              {systemStatus.connected ? <Wifi className="h-4 w-4" /> : <WifiOff className="h-4 w-4" />}
+              <span className="text-sm font-medium">
+                {systemStatus.connected ? 'Connected' : 'Disconnected'}
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
-              <div className={`h-2 w-2 rounded-full ${getStatusColor(systemStatus.erp)}`} />
-              {getStatusIcon("erp")}
-              <span className="text-sm font-medium capitalize">{systemStatus.erp}</span>
-            </div>
+            <Badge variant="secondary">
+              <Activity className="mr-1 h-3 w-3" />
+              {systemStatus.activeBuses}/{systemStatus.totalBuses} Active
+            </Badge>
 
-            {systemStatus.localFallback && (
-              <Badge variant="warning" className="text-yellow-600">
-                <Database className="mr-1 h-3 w-3" />
-                Local Fallback
-              </Badge>
-            )}
+                         <Button size="sm" variant="ghost" onClick={fetchOccupancyData}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
-        {/* Main Metrics */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Current Occupancy</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {currentData.occupancy}/{currentData.capacity}
-              </div>
-              <Progress value={occupancyPercentage} className="mt-2" />
-              <p className="text-xs text-muted-foreground mt-1">{occupancyPercentage.toFixed(1)}% capacity</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Passengers In</CardTitle>
-              <ArrowUp className="h-4 w-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">{currentData.in}</div>
-              <p className="text-xs text-muted-foreground">Total boarding today</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Passengers Out</CardTitle>
-              <ArrowDown className="h-4 w-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-red-600">{currentData.out}</div>
-              <p className="text-xs text-muted-foreground">Total alighting today</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">System Status</CardTitle>
-              <Activity className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="h-5 w-5 text-green-600" />
-                <span className="text-sm font-medium">Operational</span>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Last sync: {new Date(systemStatus.lastSync).toLocaleTimeString()}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content Tabs */}
-        <Tabs defaultValue="live" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="live">Live Feed</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="system">System</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="live" className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-3">
-              {/* Camera Feed */}
-              <Card className="lg:col-span-2">
-                <CardHeader>
-                  <CardTitle>Camera Feed</CardTitle>
-                  <CardDescription>Overhead view - Real-time passenger detection</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="aspect-video bg-slate-900 rounded-lg relative overflow-hidden">
-                    <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
-
-                    {/* Camera status overlay */}
-                    <div className="absolute top-2 right-2 flex items-center gap-2 bg-black/50 px-2 py-1 rounded">
-                      <div className={`h-2 w-2 rounded-full ${isCameraActive ? "bg-green-400" : "bg-red-400"} animate-pulse`} />
-                      <span className="text-xs text-white">{isCameraActive ? "LIVE" : "OFFLINE"}</span>
-                    </div>
-
-                    {/* Simulated detection boxes */}
-                    {isCameraActive && currentData.occupancy > 0 && (
-                      <>
-                        <div className="absolute top-4 left-4 w-8 h-8 border-2 border-green-400 rounded">
-                          <div className="absolute -top-6 left-0 text-xs text-green-400 bg-black/50 px-1 rounded">
-                            Person #1
-                          </div>
-                        </div>
-                        {currentData.occupancy > 1 && (
-                          <div className="absolute top-12 right-8 w-8 h-8 border-2 border-blue-400 rounded">
-                            <div className="absolute -top-6 right-0 text-xs text-blue-400 bg-black/50 px-1 rounded">
-                              Person #2
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-
-                    {/* Entry/Exit zones */}
-                    <div className="absolute bottom-0 left-0 right-0 h-16 border-t-2 border-dashed border-yellow-400 bg-yellow-400/10">
-                      <div className="absolute top-1 left-2 text-xs text-yellow-400 bg-black/50 px-1 rounded">
-                        Entry/Exit Zone
-                      </div>
-                    </div>
-
-                    {/* Camera controls */}
-                    <div className="absolute bottom-2 right-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setIsCameraActive(!isCameraActive)}
-                        className="bg-black/50 border-white/20 text-white hover:bg-black/70"
-                      >
-                        {isCameraActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </Button>
-                    </div>
+        {/* Main Occupancy Display */}
+        {selectedBus && (
+          <Card className={`border-2 ${getOccupancyBgColor(occupancyPercentage)}`}>
+            <CardContent className="p-8">
+              <div className="text-center space-y-6">
+                {/* Bus Info */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-center gap-2">
+                    <Bus className="h-6 w-6 text-muted-foreground" />
+                    <h2 className="text-2xl font-semibold">{selectedBus.busId}</h2>
+                    <Badge variant="secondary">{selectedBus.busCode}</Badge>
                   </div>
-                </CardContent>
-              </Card>
-
-              {/* Recent Activity */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Latest passenger movements</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {recentMovements.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-4">No recent activity</p>
-                  ) : (
-                    recentMovements.map((movement) => (
-                      <div key={movement.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                        <div className="flex items-center gap-2">
-                          {movement.type === "in" ? (
-                            <ArrowUp className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <ArrowDown className="h-4 w-4 text-red-600" />
-                          )}
-                          <span className="text-sm font-medium capitalize">Passenger {movement.type}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {new Date(movement.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                    ))
+                  <p className="text-muted-foreground">
+                    {selectedBus.providerName} • {selectedBus.category}
+                  </p>
+                  {selectedBus.routeId && (
+                    <p className="text-sm text-muted-foreground">Route: {selectedBus.routeId}</p>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
+                </div>
 
-          <TabsContent value="analytics" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Occupancy Trend</CardTitle>
-                  <CardDescription>Passenger count over time</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-64 flex items-end justify-center gap-1">
-                    {Array.from({ length: 24 }, (_, i) => {
-                      const height = Math.random() * 80 + 20
-                      return (
-                        <div
-                          key={i}
-                          className="bg-primary/20 hover:bg-primary/40 transition-colors rounded-t"
-                          style={{ height: `${height}%`, width: "3%" }}
-                          title={`Hour ${i}: ${Math.floor(height / 2)} passengers`}
-                        />
-                      )
-                    })}
-                  </div>
-                  <div className="flex justify-between text-xs text-muted-foreground mt-2">
-                    <span>00:00</span>
-                    <span>12:00</span>
-                    <span>23:59</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Daily Summary</CardTitle>
-                  <CardDescription>Today's statistics</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Peak Occupancy</span>
-                    <span className="font-medium">38/40 (95%)</span>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Average Occupancy</span>
-                    <span className="font-medium">24/40 (60%)</span>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Total Boardings</span>
-                    <span className="font-medium text-green-600">{currentData.in}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm">Total Alightings</span>
-                    <span className="font-medium text-red-600">{currentData.out}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="system" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Health</CardTitle>
-                  <CardDescription>Device and connection status</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Camera className="h-4 w-4" />
-                      <span className="text-sm">Camera Status</span>
+                {/* Large Occupancy Display */}
+                <div className="space-y-4">
+                  <div className="text-center">
+                    <div className={`text-8xl font-bold ${getOccupancyColor(occupancyPercentage)}`}>
+                      {selectedBus.occupancy}
                     </div>
-                    <Badge variant={systemStatus.camera === "online" ? "success" : "danger"}>
-                      {systemStatus.camera}
-                    </Badge>
+                    <div className="text-4xl font-medium text-muted-foreground">
+                      / {selectedBus.capacity}
+                    </div>
                   </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Database className="h-4 w-4" />
-                      <span className="text-sm">ERP Connection</span>
-                    </div>
-                    <Badge variant={systemStatus.erp === "connected" ? "success" : "danger"}>
-                      {systemStatus.erp}
-                    </Badge>
+                  {/* Progress Bar */}
+                  <div className="max-w-md mx-auto space-y-2">
+                    <Progress value={occupancyPercentage} className="h-3" />
+                    <p className="text-sm text-muted-foreground">
+                      {occupancyPercentage.toFixed(1)}% capacity
+                    </p>
                   </div>
+                </div>
 
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4" />
-                      <span className="text-sm">Local Fallback</span>
-                    </div>
-                    <Badge variant={systemStatus.localFallback ? "secondary" : "info"}>
-                      {systemStatus.localFallback ? "Active" : "Inactive"}
-                    </Badge>
+                {/* Status Indicators */}
+                <div className="flex justify-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-green-600" />
+                    <span className="text-sm font-medium">{selectedBus.inCount} boarded</span>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Clock className="h-4 w-4" />
-                      <span className="text-sm">Last Sync</span>
-                    </div>
+                  <div className="flex items-center gap-2">
+                    <TrendingDown className="h-4 w-4 text-red-600" />
+                    <span className="text-sm font-medium">{selectedBus.outCount} alighted</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
                     <span className="text-sm text-muted-foreground">
-                      {new Date(systemStatus.lastSync).toLocaleString()}
+                      {new Date(selectedBus.updatedAt).toLocaleTimeString()}
                     </span>
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>System Actions</CardTitle>
-                  <CardDescription>Manual controls and diagnostics</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button 
-                    className="w-full bg-transparent" 
-                    variant="ghost"
-                    onClick={() => handleSystemAction("diagnostics")}
-                  >
-                    <Activity className="mr-2 h-4 w-4" />
-                    Run Diagnostics
-                  </Button>
+        {/* Bus Selection */}
+        {allBuses.length > 0 && (
+          <Card>
+            <CardContent className="p-6">
+              <h3 className="text-lg font-semibold mb-4">All Buses</h3>
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {allBuses.map((bus) => {
+                  const busOccupancyPercentage = (bus.occupancy / bus.capacity) * 100
+                  return (
+                    <div
+                      key={bus.busId}
+                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+                        selectedBus?.busId === bus.busId
+                          ? 'border-primary bg-primary/5'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                      onClick={() => setSelectedBus(bus)}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                                                 <h4 className="font-semibold">{bus.busId}</h4>
+                         <Badge variant="secondary">{bus.busCode}</Badge>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <div className="text-2xl font-bold text-center">
+                          {bus.occupancy}/{bus.capacity}
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <Progress value={busOccupancyPercentage} className="h-2" />
+                          <p className="text-xs text-muted-foreground text-center">
+                            {busOccupancyPercentage.toFixed(1)}%
+                          </p>
+                        </div>
 
-                  <Button 
-                    className="w-full bg-transparent" 
-                    variant="ghost"
-                    onClick={() => handleSystemAction("erp-sync")}
-                  >
-                    <Database className="mr-2 h-4 w-4" />
-                    Force ERP Sync
-                  </Button>
+                        <div className="flex justify-between text-xs text-muted-foreground">
+                          <span>↑ {bus.inCount}</span>
+                          <span>↓ {bus.outCount}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
-                  <Button 
-                    className="w-full bg-transparent" 
-                    variant="ghost"
-                    onClick={() => handleSystemAction("restart-camera")}
-                  >
-                    <Camera className="mr-2 h-4 w-4" />
-                    Restart Camera
-                  </Button>
-
-                  <Button 
-                    className="w-full" 
-                    variant="danger"
-                    onClick={() => handleSystemAction("emergency-reset")}
-                  >
-                    <Power className="mr-2 h-4 w-4" />
-                    Emergency Reset
-                  </Button>
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-        </Tabs>
+        {/* System Status Footer */}
+        <div className="text-center text-sm text-muted-foreground">
+          <p>Last updated: {new Date(systemStatus.lastUpdate).toLocaleString()}</p>
+          <p>TransJakarta Occupancy Management System v1.0</p>
+        </div>
       </div>
     </div>
   )

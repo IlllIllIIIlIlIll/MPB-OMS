@@ -1,5 +1,4 @@
 import { Request, Response, NextFunction } from 'express';
-import { Prisma } from '@prisma/client';
 
 export interface AppError extends Error {
   statusCode?: number;
@@ -24,31 +23,6 @@ export const errorHandler = (
     ip: req.ip,
     userAgent: req.get('User-Agent')
   });
-
-  // Prisma errors
-  if (err instanceof Prisma.PrismaClientKnownRequestError) {
-    switch (err.code) {
-      case 'P2002':
-        error = { message: 'Duplicate field value entered', statusCode: 400 } as AppError;
-        break;
-      case 'P2025':
-        error = { message: 'Record not found', statusCode: 404 } as AppError;
-        break;
-      case 'P2003':
-        error = { message: 'Foreign key constraint failed', statusCode: 400 } as AppError;
-        break;
-      default:
-        error = { message: 'Database operation failed', statusCode: 400 } as AppError;
-    }
-  }
-
-  if (err instanceof Prisma.PrismaClientValidationError) {
-    error = { message: 'Invalid data provided', statusCode: 400 } as AppError;
-  }
-
-  if (err instanceof Prisma.PrismaClientInitializationError) {
-    error = { message: 'Database connection failed', statusCode: 500 } as AppError;
-  }
 
   // JWT errors
   if (err.name === 'JsonWebTokenError') {

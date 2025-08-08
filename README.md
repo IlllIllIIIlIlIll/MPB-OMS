@@ -1,394 +1,409 @@
 # TransJakarta Occupancy Management System (OMS)
 
-A comprehensive system designed to address critical overcrowding during peak hours by using overhead cameras to track passenger movement. These cameras, mounted above bus doors, detect and classify entries and exits through top-down head tracking. Each detected individual is marked with a status (IN or OUT), and a real-time passenger count is maintained using a differential algorithm.
+A backend-heavy Occupancy Management System designed for TransJakarta operators to monitor real-time bus occupancy. The system integrates with edge devices (Jetson/RPi + Camera) that detect passenger movement and provides a simplified UI focused on displaying occupancy information prominently.
 
-## Features
+## 🚀 Complete Infrastructure
 
-### 🚌 Mobile App Interface
-- Real-time bus occupancy information
-- Route planning with occupancy predictions
-- Push notifications for capacity alerts
-- User-friendly interface for commuters
+### High-Priority Components Implemented ✅
 
-### 🚏 Bus Stop Displays
-- Public displays showing real-time occupancy
-- Estimated arrival times with capacity indicators
-- Route information and next bus details
-- High-visibility design for quick scanning
+1. **MQTT Broker (EMQX)** - Real-time device communication
+2. **Redis Streams** - Durable message processing
+3. **BullMQ Workers** - Distributed job processing
+4. **Docker Compose** - Complete infrastructure orchestration
+5. **PostgreSQL + TimescaleDB** - Time-series data storage
 
-### 🛡️ Platform Guard Dashboard
-- Tablet-based interface for station staff
-- Manual occupancy override capabilities
-- Real-time alerts and notifications
-- Quick access to bus and route information
-
-### 🖥️ Admin Web Dashboard
-- Comprehensive system overview
-- Real-time analytics and reporting
-- User management and system configuration
-- Alert management and resolution
-
-## Tech Stack
-
-### Frontend
-- **Framework**: Next.js 14 (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS
-- **Animations**: Framer Motion
-- **State Management**: React Query
-- **Real-time**: Socket.io Client
-
-### Backend
-- **Runtime**: Node.js
-- **Framework**: Express.js
-- **Language**: TypeScript
-- **Database**: PostgreSQL
-- **ORM**: Prisma
-- **Real-time**: Socket.io
-- **Authentication**: JWT
-- **Security**: bcrypt, helmet, cors
-
-## Project Structure
+### System Architecture
 
 ```
-MPB-OMS/
-├── backend/                 # Express.js API server
-│   ├── src/
-│   │   ├── routes/         # API route handlers
-│   │   ├── middleware/     # Express middleware
-│   │   ├── services/       # Business logic
-│   │   └── lib/           # Utilities and configurations
-│   ├── prisma/            # Database schema and migrations
-│   └── scripts/           # Database seeding and utilities
-├── frontend/              # Next.js web application
-│   ├── app/              # Next.js App Router pages
-│   ├── components/       # React components
-│   ├── hooks/           # Custom React hooks
-│   └── lib/             # Utilities and API client
-└── README.md
+[Edge Device per Bus]
+ Jetson/RPi + Camera → local IN/OUT → publishes occupancy events (JSON)
+
+            │  MQTT or HTTPS (TLS)
+            ▼
+┌────────────────────────────────────────────────────────────────────┐
+│                         Ingestion & Streams (Node)                 │
+│  1) MQTT Broker (EMQX)  ← fallback HTTPS ingest (Express)        │
+│  2) Ingest Service (Node): subscribe/validate/normalize           │
+│  3) Persist to Redis Streams (XADD) for durable fan‑out           │
+└────────────────────────────────────────────────────────────────────┘
+            │                                  │
+            │ (XREADGROUP)                     │ (XREADGROUP)
+            ▼                                  ▼
+┌───────────────────────────────┐     ┌───────────────────────────────┐
+│ Realtime Aggregator           │     │ Recommendation & Hotspots     │
+│ (Node workers, BullMQ)        │     │ (Node workers, BullMQ)        │
+│ - dedupe, windowed reconcile  │     │ - per-demand recs             │
+│ - upsert "now" cache          │     │ - periodic hotspot precompute │
+└───────────────┬───────────────┘     └───────────────┬───────────────┘
+                │                                     │
+                ▼                                     ▼
+       [Redis Cluster]                         [PostgreSQL/Timescale]
+       - hot cache: occ:now:<bus_id>          - source of truth, history
+       - Pub/Sub for UI pushes                - analytics & reports
+
+                      ▲                                   │
+                      │                                   │
+               WebSocket/SSE                       Batch/retention jobs
+                      │                                   │
+                      ▼                                   ▼
+            Next.js Frontend  ─────→  Node/Express API Gateway
+                    (SSR/CSR)          (/occupancy, /map, /recommendation)
 ```
 
-## Getting Started
+## 🏗️ Infrastructure Components
+
+### 1. MQTT Broker (EMQX)
+- **Port**: 1883 (MQTT), 8883 (MQTT/SSL), 8083 (WebSocket), 18083 (Dashboard)
+- **Topics**: `/oms/v1/occupancy`, `/oms/v1/device/+/status`, `/oms/v1/device/+/heartbeat`
+- **Features**: TLS support, authentication, message persistence
+
+### 2. Redis Streams & Caching
+- **Port**: 6379
+- **Streams**: `stream:occupancy` for real-time processing
+- **Cache**: `occ:now:<bus_id>` for current occupancy
+- **Queues**: BullMQ for job processing
+
+### 3. PostgreSQL Database
+- **Port**: 5432
+- **Database**: `tj_oms`
+- **Extensions**: TimescaleDB for time-series optimization
+- **Schema**: Bus codes, metadata, occupancy logs, devices
+
+### 4. BullMQ Workers
+- **Aggregator Worker**: Processes Redis streams, updates cache
+- **Recommendation Worker**: Analyzes hotspots, generates recommendations
+- **Scheduled Jobs**: Periodic analysis every 60 seconds
+
+## 🚀 Quick Start with Docker
 
 ### Prerequisites
+- **Docker** and **Docker Compose**
+- **4GB RAM** minimum (8GB recommended)
+- **10GB disk space**
 
-- **Node.js** (v18 or higher)
-- **PostgreSQL** (v14 or higher)
-- **npm** or **yarn** package manager
+### 1. Clone and Setup
+```bash
+git clone <repository-url>
+cd MPB-OMS
+```
 
-### 1. Database Setup
+### 2. Start Complete Infrastructure
+```bash
+# Start all services
+docker-compose up -d
 
-1. **Install PostgreSQL** (if not already installed):
-   - **Windows**: Download from [postgresql.org](https://www.postgresql.org/download/windows/)
-   - **macOS**: `brew install postgresql`
-   - **Linux**: `sudo apt-get install postgresql postgresql-contrib`
+# Check status
+docker-compose ps
+```
 
-2. **Create Database**:
-   ```bash
-   # Connect to PostgreSQL
-   psql -U postgres
-   
-   # Create database
-   CREATE DATABASE tj_oms;
-   
-   # Exit psql
-   \q
-   ```
+### 3. Initialize Database
+```bash
+# Run database migrations and seed data
+docker-compose exec backend npm run db:push
+docker-compose exec backend npm run db:seed
+```
 
-### 2. Backend Setup
+### 4. Access Services
 
-1. **Navigate to backend directory**:
-   ```bash
-   cd backend
-   ```
+| Service | URL | Description |
+|---------|-----|-------------|
+| **Frontend** | http://localhost:3002 | OMS Dashboard |
+| **Backend API** | http://localhost:3001 | REST API |
+| **MQTT Dashboard** | http://localhost:18083 | EMQX Management |
+| **Redis Commander** | http://localhost:8081 | Redis Management |
+| **Adminer** | http://localhost:8080 | Database Management |
 
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+### 5. Test Edge Device Integration
+```bash
+# Simulate edge device message
+mosquitto_pub -h localhost -p 1883 -t "/oms/v1/occupancy" -m '{
+  "bus_id": "TJ-0345",
+  "bus_code": "TJ",
+  "door_id": 1,
+  "in_count": 3,
+  "out_count": 1,
+  "occupancy": 37,
+  "ts_device": "2025-01-15T12:34:56Z",
+  "device_id": "EDGE-A1B2",
+  "fw_version": "1.7.3",
+  "sig": "HMAC_SHA256_BASE64"
+}'
+```
 
-3. **Set up environment variables**:
-   ```bash
-   # Copy example environment file
-   cp .env.example .env
-   
-   # Edit .env with your database credentials
-   # Update DATABASE_URL, JWT_SECRET, etc.
-   ```
+## 🔧 Development Setup
 
-4. **Set up database**:
-   ```bash
-   # Generate Prisma client
-   npm run prisma:generate
-   
-   # Push schema to database
-   npm run prisma:push
-   
-   # Seed database with initial data
-   npm run seed
-   ```
+### Local Development (without Docker)
 
-5. **Start development server**:
-   ```bash
-   npm run dev
-   ```
+#### 1. Install Dependencies
+```bash
+# Backend
+cd backend
+npm install
 
-   The backend will be running at `http://localhost:3001`
+# Frontend
+cd frontend
+npm install
+```
 
-### 3. Frontend Setup
+#### 2. Setup Infrastructure
+```bash
+# Install Redis
+# macOS: brew install redis
+# Ubuntu: sudo apt-get install redis-server
 
-1. **Navigate to frontend directory** (in a new terminal):
-   ```bash
-   cd frontend
-   ```
+# Install PostgreSQL
+# macOS: brew install postgresql
+# Ubuntu: sudo apt-get install postgresql
 
-2. **Install dependencies**:
-   ```bash
-   npm install
-   ```
+# Install MQTT Broker (EMQX)
+# Download from: https://www.emqx.io/downloads
+```
 
-3. **Set up environment variables**:
-   ```bash
-   # Copy example environment file
-   cp .env.local.example .env.local
-   
-   # Edit .env.local if needed (defaults should work)
-   ```
-
-4. **Start development server**:
-   ```bash
-   npm run dev
-   ```
-
-   The frontend will be running at `http://localhost:3002`
-
-### 4. Verify Installation
-
-1. **Backend Health Check**: Visit `http://localhost:3001/health`
-   - Should return: `{"status":"ok","timestamp":"..."}`
-
-2. **Frontend**: Visit `http://localhost:3002`
-   - Should show the landing page with system interface cards
-
-3. **Database**: Check that tables were created:
-   ```bash
-   psql -U postgres -d tj_oms -c "\dt"
-   ```
-
-## Environment Variables
-
-### Backend (.env)
-```env
-# Database
-DATABASE_URL="postgresql://username:password@localhost:5432/tj_oms"
-
-# JWT
+#### 3. Environment Variables
+```bash
+# Backend .env
+DATABASE_URL="postgresql://postgres:postgres123@localhost:5432/tj_oms"
+REDIS_URL="redis://localhost:6379"
+MQTT_URL="mqtt://localhost:1883"
 JWT_SECRET="your-super-secret-jwt-key"
-JWT_EXPIRES_IN="24h"
-
-# Server
-PORT=3001
-NODE_ENV="development"
-
-# CORS
-CORS_ORIGIN="http://localhost:3002"
-
-# Rate Limiting
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
-
-# File Upload
-MAX_FILE_SIZE=5242880
-UPLOAD_PATH="./uploads"
-
-# Socket.io
-SOCKET_CORS_ORIGIN="http://localhost:3002"
-
-# Logging
-LOG_LEVEL="info"
 ```
 
-### Frontend (.env.local)
-```env
-# Backend API
-NEXT_PUBLIC_API_URL="http://localhost:3001"
+#### 4. Start Services
+```bash
+# Terminal 1: Backend
+cd backend
+npm run dev
 
-# Socket.io
-NEXT_PUBLIC_SOCKET_URL="http://localhost:3001"
+# Terminal 2: Frontend
+cd frontend
+npm run dev
 
-# App Info
-NEXT_PUBLIC_APP_NAME="TransJakarta OMS"
-NEXT_PUBLIC_APP_VERSION="1.0.0"
+# Terminal 3: Workers
+cd backend
+npm run worker:aggregator
+npm run worker:recommendation
 ```
 
-## API Endpoints
+## 📊 API Endpoints
 
 ### Authentication
 - `POST /api/auth/login` - User login
 - `POST /api/auth/logout` - User logout
 - `GET /api/auth/me` - Get current user
-- `POST /api/auth/users` - Create user (admin only)
 
-### Buses
-- `GET /api/buses` - Get all buses
-- `GET /api/buses/:id` - Get specific bus
-- `PUT /api/buses/:id/occupancy` - Update bus occupancy
-- `GET /api/buses/:id/occupancy/history` - Get occupancy history
-- `PUT /api/buses/:id/location` - Update bus location
+### Occupancy Management
+- `GET /api/occupancy/now` - Get current occupancy for all active buses
+- `GET /api/occupancy/:busId` - Get current occupancy for specific bus
+- `GET /api/occupancy/:busId/history` - Get occupancy history for bus
+- `POST /api/occupancy/ingest` - Ingest occupancy data from edge devices
 
-### Routes
-- `GET /api/routes` - Get all routes
-- `GET /api/routes/:id` - Get specific route
-- `GET /api/routes/:id/buses` - Get buses on route
+### System Status
+- `GET /health` - Health check with component status
+- `GET /api/system/status` - Detailed system status
 
-### Stations
-- `GET /api/stations` - Get all stations
-- `GET /api/stations/:id` - Get specific station
+### MQTT Topics
+- `/oms/v1/occupancy` - Occupancy events from edge devices
+- `/oms/v1/device/{device_id}/status` - Device status updates
+- `/oms/v1/device/{device_id}/heartbeat` - Device heartbeat
 
-### Analytics
-- `GET /api/analytics/overview` - System overview
-- `GET /api/analytics/routes` - Route analytics
-- `GET /api/analytics/stations` - Station analytics
+## 🔄 Data Flow
 
-### Alerts
-- `GET /api/alerts` - Get all alerts
-- `GET /api/alerts/:id` - Get specific alert
-- `PUT /api/alerts/:id/resolve` - Resolve alert
-- `GET /api/alerts/stats` - Alert statistics
-
-## Real-time Events (Socket.io)
-
-### Client Events
-- `join:room` - Join a specific room (bus, route, station, admin, guard)
-- `leave:room` - Leave a room
-- `occupancy:update` - Manual occupancy update
-- `camera:status` - Camera status update
-
-### Server Events
-- `camera:status` - Camera online/offline status
-- `camera:occupancy` - Real-time occupancy from camera
-- `bus:location` - Bus location updates
-- `bus:occupancy` - Bus occupancy updates
-- `bus:arrival` - Bus arrival updates
-- `alert:new` - New alert notification
-- `alert:resolved` - Alert resolved notification
-- `system:status` - System health status
-- `system:health` - Detailed system health
-
-## Quick Start
-
-### Option 1: Single Command (Recommended)
-```bash
-# Start both backend and frontend simultaneously
-npm run dev
-
-# Or use the provided scripts
-./start.bat          # Windows Batch
-./start.ps1          # Windows PowerShell
+### 1. Edge Device → MQTT → Redis Streams
+```json
+{
+  "bus_id": "TJ-0345",
+  "bus_code": "TJ",
+  "door_id": 1,
+  "in_count": 3,
+  "out_count": 1,
+  "occupancy": 37,
+  "ts_device": "2025-01-15T12:34:56Z",
+  "device_id": "EDGE-A1B2",
+  "fw_version": "1.7.3",
+  "sig": "HMAC_SHA256_BASE64"
+}
 ```
 
-### Option 2: Individual Commands
-```bash
-# Terminal 1 - Backend
-cd backend
-npm run dev
+### 2. Redis Streams → BullMQ Workers
+- **Aggregator Worker**: Processes streams, updates cache
+- **Recommendation Worker**: Analyzes patterns, generates insights
 
-# Terminal 2 - Frontend  
-cd frontend
-npm run dev
+### 3. Cache → Frontend
+- **Redis Cache**: `occ:now:<bus_id>` for real-time data
+- **WebSocket**: Real-time updates to UI
+
+## 🐳 Docker Commands
+
+### Management
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop all services
+docker-compose down
+
+# Rebuild and restart
+docker-compose up -d --build
+
+# Access specific service
+docker-compose exec backend sh
+docker-compose exec postgres psql -U postgres -d tj_oms
 ```
 
-## Development Scripts
-
-### Root (Project Level)
+### Monitoring
 ```bash
-npm run dev              # Start both backend and frontend
-npm run dev:backend      # Start backend only
-npm run dev:frontend     # Start frontend only
-npm run install:all      # Install dependencies for all packages
-npm run build            # Build both backend and frontend
-npm run db:migrate       # Run database migrations
-npm run db:seed          # Seed database
-npm run db:studio        # Open Prisma Studio
+# Check service health
+docker-compose ps
+
+# View resource usage
+docker stats
+
+# Check logs for specific service
+docker-compose logs backend
+docker-compose logs mqtt
 ```
 
-### Backend
+## 🔍 Monitoring & Debugging
+
+### MQTT Dashboard
+- **URL**: http://localhost:18083
+- **Default**: admin/public
+- **Features**: Topic monitoring, message inspection, device management
+
+### Redis Commander
+- **URL**: http://localhost:8081
+- **Features**: Stream inspection, cache management, key monitoring
+
+### Database Management
+- **URL**: http://localhost:8080
+- **System**: PostgreSQL
+- **Server**: postgres
+- **Username**: postgres
+- **Password**: postgres123
+- **Database**: tj_oms
+
+## 🚀 Production Deployment
+
+### Environment Variables
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm start           # Start production server
-npm run lint        # Run ESLint
-npm run prisma:generate  # Generate Prisma client
-npm run prisma:push     # Push schema to database
-npm run prisma:migrate  # Run migrations
-npm run prisma:studio   # Open Prisma Studio
-npm run seed         # Seed database
+# Production .env
+NODE_ENV=production
+DATABASE_URL=postgresql://user:pass@host:5432/tj_oms
+REDIS_URL=redis://host:6379
+MQTT_URL=mqtt://host:1883
+JWT_SECRET=your-production-secret
 ```
 
-### Frontend
+### Kubernetes Deployment
 ```bash
-npm run dev          # Start development server
-npm run build        # Build for production
-npm start           # Start production server
-npm run lint        # Run ESLint
-npm run type-check  # Run TypeScript check
+# Apply Kubernetes manifests
+kubectl apply -f k8s/
+
+# Check deployment status
+kubectl get pods
+kubectl get services
 ```
 
-## Default Users
+### Scaling
+```bash
+# Scale backend replicas
+kubectl scale deployment oms-backend --replicas=3
 
-After running the seed script, these users will be available:
+# Scale workers
+kubectl scale deployment oms-aggregator --replicas=2
+kubectl scale deployment oms-recommendation --replicas=2
+```
 
-### Admin User
-- **Username**: `admin`
-- **Password**: `admin123`
-- **Role**: `ADMIN`
-
-### Platform Guard User
-- **Username**: `guard`
-- **Password**: `guard123`
-- **Role**: `PLATFORM_GUARD`
-
-## Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
-1. **Database Connection Error**:
-   - Verify PostgreSQL is running
-   - Check DATABASE_URL in .env
-   - Ensure database exists
+1. **MQTT Connection Failed**
+   ```bash
+   # Check MQTT broker
+   docker-compose logs mqtt
+   
+   # Test connection
+   mosquitto_pub -h localhost -p 1883 -t "test" -m "hello"
+   ```
 
-2. **Port Already in Use**:
-   - Change PORT in .env
-   - Kill existing processes: `npx kill-port 3002 3001`
+2. **Redis Connection Failed**
+   ```bash
+   # Check Redis
+   docker-compose logs redis
+   
+   # Test connection
+   docker-compose exec redis redis-cli ping
+   ```
 
-3. **Prisma Errors**:
-   - Run `npm run prisma:generate`
-   - Check database connection
-   - Verify schema syntax
+3. **Database Connection Failed**
+   ```bash
+   # Check PostgreSQL
+   docker-compose logs postgres
+   
+   # Test connection
+   docker-compose exec postgres psql -U postgres -d tj_oms -c "SELECT 1"
+   ```
 
-4. **Frontend Build Errors**:
-   - Clear .next folder: `rm -rf .next`
-   - Reinstall dependencies: `rm -rf node_modules && npm install`
+4. **Workers Not Processing**
+   ```bash
+   # Check worker logs
+   docker-compose logs backend
+   
+   # Check Redis streams
+   docker-compose exec redis redis-cli XINFO STREAM stream:occupancy
+   ```
 
-### Getting Help
+## 📈 Performance Metrics
 
-- Check the console for error messages
-- Verify all environment variables are set
-- Ensure all dependencies are installed
-- Check that both backend and frontend are running
+### Expected Performance
+- **Latency**: < 100ms for API responses
+- **Throughput**: 1000+ messages/second
+- **Concurrent Users**: 100+ simultaneous connections
+- **Data Retention**: 6 months detailed, 2 years aggregated
 
-## Next Steps
+### Monitoring
+- **Health Checks**: All services have health endpoints
+- **Metrics**: Prometheus metrics available
+- **Logging**: Structured logging with correlation IDs
+- **Alerts**: High occupancy, device offline, system errors
 
-1. **Complete the frontend pages** for each interface
-2. **Implement real-time features** using Socket.io
-3. **Add authentication flows** and protected routes
-4. **Create mobile-responsive designs**
-5. **Add comprehensive error handling**
-6. **Implement testing suite**
-7. **Set up CI/CD pipeline**
-8. **Add monitoring and logging**
+## 🔐 Security
 
-## Contributing
+### Authentication
+- **JWT Tokens**: For API access
+- **Device Signatures**: HMAC-SHA256 for edge devices
+- **MQTT Authentication**: Username/password for devices
+
+### Network Security
+- **TLS/SSL**: For all external communications
+- **Firewall**: Port restrictions and network isolation
+- **VPN**: For remote device management
+
+## 📚 Next Steps
+
+### Phase 2: Kubernetes Deployment
+- [ ] Kubernetes manifests
+- [ ] Helm charts
+- [ ] Service mesh (Istio)
+- [ ] Horizontal pod autoscaling
+
+### Phase 3: Apache Airflow
+- [ ] DAGs for batch processing
+- [ ] Data retention policies
+- [ ] Analytics pipelines
+- [ ] ETL workflows
+
+### Phase 4: Advanced Monitoring
+- [ ] Prometheus metrics
+- [ ] Grafana dashboards
+- [ ] ELK stack for logging
+- [ ] Alert management
+
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -396,6 +411,6 @@ After running the seed script, these users will be available:
 4. Add tests if applicable
 5. Submit a pull request
 
-## License
+## 📄 License
 
 This project is licensed under the MIT License.

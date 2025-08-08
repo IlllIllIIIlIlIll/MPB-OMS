@@ -1,264 +1,133 @@
 import { Server } from 'socket.io';
-import prisma from '../lib/prisma';
+import { createClient } from 'redis';
+
+const redisClient = createClient({
+  url: process.env.REDIS_URL || 'redis://localhost:6379'
+});
+
+redisClient.connect().catch(console.error);
 
 export const setupSocketHandlers = (io: Server) => {
+  console.log('🔌 Setting up Socket.io handlers...');
+
   io.on('connection', (socket) => {
-    console.log(`Client connected: ${socket.id}`);
+    console.log(`👤 Client connected: ${socket.id}`);
 
-    // Join room for specific bus updates
-    socket.on('join:bus', (busId: string) => {
-      socket.join(`bus:${busId}`);
-      console.log(`Client ${socket.id} joined bus room: ${busId}`);
+    // Join bus-specific room
+    socket.on('join-bus', (busId: string) => {
+      socket.join(`bus-${busId}`);
+      console.log(`🚌 Client ${socket.id} joined bus ${busId}`);
     });
 
-    // Join room for specific route updates
-    socket.on('join:route', (routeId: string) => {
-      socket.join(`route:${routeId}`);
-      console.log(`Client ${socket.id} joined route room: ${routeId}`);
-    });
-
-    // Join room for specific station updates
-    socket.on('join:station', (stationId: string) => {
-      socket.join(`station:${stationId}`);
-      console.log(`Client ${socket.id} joined station room: ${stationId}`);
+    // Leave bus-specific room
+    socket.on('leave-bus', (busId: string) => {
+      socket.leave(`bus-${busId}`);
+      console.log(`🚌 Client ${socket.id} left bus ${busId}`);
     });
 
     // Join admin room
-    socket.on('join:admin', () => {
-      socket.join('admin');
-      console.log(`Client ${socket.id} joined admin room`);
+    socket.on('join-admin', () => {
+      socket.join('admin-room');
+      console.log(`👑 Client ${socket.id} joined admin room`);
     });
 
-    // Join platform guard room
-    socket.on('join:guard', () => {
-      socket.join('guard');
-      console.log(`Client ${socket.id} joined guard room`);
-    });
-
-    // Handle camera status updates
-    socket.on('camera:status', async (data: { deviceId: string; status: 'online' | 'offline' }) => {
+    // Handle occupancy updates
+    socket.on('occupancy-update', async (data) => {
       try {
-        await prisma.camera.updateMany({
-          where: { deviceId: data.deviceId },
-          data: {
-            lastPing: new Date(),
-            isActive: data.status === 'online'
-          }
+        const { busId, occupancy, capacity } = data;
+        
+        // Store in Redis
+        await redisClient.hSet(`occ:now:${busId}`, {
+          bus_id: busId,
+          occupancy: occupancy.toString(),
+          capacity: (capacity || 40).toString(),
+          updated_at: new Date().toISOString()
         });
 
-        // Emit camera status update to admin room
-        io.to('admin').emit('camera:status:update', data);
+        // Broadcast to bus-specific room
+        io.to(`bus-${busId}`).emit('occupancy-updated', {
+          busId,
+          occupancy,
+          capacity: capacity || 40,
+          timestamp: new Date().toISOString()
+        });
+
+        // Broadcast to admin room
+        io.to('admin-room').emit('occupancy-updated', {
+          busId,
+          occupancy,
+          capacity: capacity || 40,
+          timestamp: new Date().toISOString()
+        });
+
+        console.log(`📊 Occupancy update for bus ${busId}: ${occupancy}/${capacity || 40}`);
       } catch (error) {
-        console.error('Camera status update error:', error);
+        console.error('❌ Error handling occupancy update:', error);
       }
     });
 
-    // Handle manual occupancy updates from platform guards
-    socket.on('occupancy:manual', async (data: { busId: string; count: number; userId: string }) => {
+    // Handle device status updates
+    socket.on('device-status', async (data) => {
       try {
-        // Create occupancy record
-        const occupancy = await prisma.occupancy.create({
-          data: {
-            busId: data.busId,
-            count: data.count,
-            source: 'manual'
-          }
+        const { deviceId, status, busId } = data;
+        
+        // Store device status in Redis
+        await redisClient.hSet(`device:${deviceId}`, {
+          device_id: deviceId,
+          status: status,
+          bus_id: busId || 'unknown',
+          last_ping: new Date().toISOString()
         });
 
-        // Get bus details
-        const bus = await prisma.bus.findUnique({
-          where: { id: data.busId },
-          include: {
-            route: {
-              select: {
-                routeNumber: true,
-                name: true
-              }
-            }
-          }
+        // Broadcast to admin room
+        io.to('admin-room').emit('device-status-updated', {
+          deviceId,
+          status,
+          busId,
+          timestamp: new Date().toISOString()
         });
 
-        if (bus) {
-          const occupancyPercentage = bus.capacity > 0 ? Math.round(data.count / bus.capacity * 100) : 0;
-
-          // Emit to specific bus room
-          io.to(`bus:${data.busId}`).emit('bus:occupancy:update', {
-            busId: data.busId,
-            busNumber: bus.busNumber,
-            routeNumber: bus.route.routeNumber,
-            count: data.count,
-            occupancyPercentage,
-            timestamp: occupancy.timestamp,
-            source: 'manual'
-          });
-
-          // Emit to admin room
-          io.to('admin').emit('bus:occupancy:update', {
-            busId: data.busId,
-            busNumber: bus.busNumber,
-            routeNumber: bus.route.routeNumber,
-            count: data.count,
-            occupancyPercentage,
-            timestamp: occupancy.timestamp,
-            source: 'manual'
-          });
-
-          // Check for capacity alerts
-          if (occupancyPercentage >= 90) {
-            const alert = await prisma.alert.create({
-              data: {
-                type: 'CAPACITY_LIMIT',
-                busId: data.busId,
-                message: `Bus ${bus.busNumber} (${bus.route.routeNumber}) is at ${occupancyPercentage}% capacity`,
-                severity: occupancyPercentage >= 95 ? 'CRITICAL' : 'HIGH'
-              }
-            });
-
-            io.emit('alert:capacity:reached', {
-              busId: data.busId,
-              busNumber: bus.busNumber,
-              routeNumber: bus.route.routeNumber,
-              occupancyPercentage,
-              message: `Bus ${bus.busNumber} is at ${occupancyPercentage}% capacity`
-            });
-          }
-        }
+        console.log(`📱 Device status update: ${deviceId} = ${status}`);
       } catch (error) {
-        console.error('Manual occupancy update error:', error);
+        console.error('❌ Error handling device status:', error);
       }
     });
 
-    // Handle bus location updates
-    socket.on('bus:location', async (data: { busId: string; latitude: number; longitude: number }) => {
-      try {
-        await prisma.bus.update({
-          where: { id: data.busId },
-          data: {
-            currentLat: data.latitude,
-            currentLng: data.longitude,
-            lastLocation: new Date()
-          }
-        });
-
-        // Emit location update to all clients
-        io.emit('bus:location:update', {
-          busId: data.busId,
-          latitude: data.latitude,
-          longitude: data.longitude,
-          timestamp: new Date()
-        });
-      } catch (error) {
-        console.error('Bus location update error:', error);
-      }
-    });
-
-    // Handle arrival updates
-    socket.on('arrival:update', async (data: { busId: string; stationId: string; eta: Date }) => {
-      try {
-        // Find existing arrival
-        let arrival = await prisma.arrival.findFirst({
-          where: {
-            busId: data.busId,
-            stationId: data.stationId
-          }
-        });
-
-        if (arrival) {
-          // Update existing arrival
-          arrival = await prisma.arrival.update({
-            where: { id: arrival.id },
-            data: {
-              eta: data.eta,
-              isActive: true
-            }
-          });
-        } else {
-          // Create new arrival
-          arrival = await prisma.arrival.create({
-            data: {
-              busId: data.busId,
-              stationId: data.stationId,
-              eta: data.eta
-            }
-          });
-        }
-
-        // Emit to station room
-        io.to(`station:${data.stationId}`).emit('arrival:update', arrival);
-      } catch (error) {
-        console.error('Arrival update error:', error);
-      }
-    });
-
-    // Handle system status updates
-    socket.on('system:status', (data: { status: string; message: string }) => {
-      io.to('admin').emit('system:status:update', {
-        ...data,
-        timestamp: new Date()
-      });
-    });
-
-    // Handle disconnect
+    // Handle disconnection
     socket.on('disconnect', () => {
-      console.log(`Client disconnected: ${socket.id}`);
+      console.log(`👤 Client disconnected: ${socket.id}`);
     });
   });
 
-  // Periodic system health check
+  // Set up periodic broadcasts
   setInterval(async () => {
     try {
-      // Check for offline cameras
-      const offlineCameras = await prisma.camera.findMany({
-        where: {
-          isActive: true,
-          lastPing: {
-            lt: new Date(Date.now() - 5 * 60 * 1000) // 5 minutes ago
-          }
-        }
-      });
-
-      // Create alerts for offline cameras
-      for (const camera of offlineCameras) {
-        const existingAlert = await prisma.alert.findFirst({
-          where: {
-            type: 'CAMERA_OFFLINE',
-            busId: camera.busId,
-            isActive: true
-          }
-        });
-
-        if (!existingAlert) {
-          await prisma.alert.create({
-            data: {
-              type: 'CAMERA_OFFLINE',
-              busId: camera.busId,
-              message: `Camera ${camera.deviceId} is offline`,
-              severity: 'MEDIUM'
-            }
-          });
-
-          io.to('admin').emit('alert:camera:offline', {
-            cameraId: camera.id,
-            deviceId: camera.deviceId,
-            busId: camera.busId
+      // Get all current occupancy data
+      const keys = await redisClient.keys('occ:now:*');
+      const occupancyData = [];
+      
+      for (const key of keys) {
+        const data = await redisClient.hGetAll(key);
+        if (data.bus_id && data.occupancy) {
+          occupancyData.push({
+            busId: data.bus_id,
+            occupancy: parseInt(data.occupancy),
+            capacity: parseInt(data.capacity) || 40,
+            updatedAt: data.updated_at
           });
         }
       }
 
-      // Emit system health update
-      const totalCameras = await prisma.camera.count({ where: { isActive: true } });
-      const onlineCameras = totalCameras - offlineCameras.length;
-      const healthPercentage = totalCameras > 0 ? Math.round((onlineCameras / totalCameras) * 100) : 0;
-
-      io.to('admin').emit('system:health:update', {
-        totalCameras,
-        onlineCameras,
-        offlineCameras: offlineCameras.length,
-        healthPercentage,
-        timestamp: new Date()
+      // Broadcast to admin room
+      io.to('admin-room').emit('occupancy-summary', {
+        buses: occupancyData,
+        totalBuses: occupancyData.length,
+        timestamp: new Date().toISOString()
       });
     } catch (error) {
-      console.error('System health check error:', error);
+      console.error('❌ Error broadcasting occupancy summary:', error);
     }
-  }, 60000); // Check every minute
+  }, 5000); // Every 5 seconds
+
+  console.log('✅ Socket.io handlers configured');
 }; 

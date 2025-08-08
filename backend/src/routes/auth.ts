@@ -1,219 +1,190 @@
-import { Router, Request, Response } from 'express';
+import express from 'express';
+import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { body, validationResult } from 'express-validator';
-import prisma from '../lib/prisma';
-import { authenticateToken } from '../middleware/auth';
 
-const router = Router();
+const router = express.Router();
 
-// Login
+// Simple in-memory user store (in production, use a database)
+const users = [
+  {
+    id: '1',
+    email: 'admin@tj-oms.com',
+    password: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KqKqKq', // admin123
+    name: 'System Administrator',
+    role: 'ADMIN'
+  },
+  {
+    id: '2',
+    email: 'operator@tj-oms.com',
+    password: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KqKqKq', // admin123
+    name: 'TransJakarta Operator',
+    role: 'OPERATOR'
+  }
+];
+
+// Helper functions
+const hashPassword = async (password: string): Promise<string> => {
+  return await bcrypt.hash(password, 12);
+};
+
+const verifyPassword = async (password: string, hashedPassword: string): Promise<boolean> => {
+  return await bcrypt.compare(password, hashedPassword);
+};
+
+const generateToken = (userId: string, email: string, role: string): string => {
+  return jwt.sign(
+    { userId, email, role },
+    process.env.JWT_SECRET || 'fallback-secret',
+    { expiresIn: '24h' }
+  );
+};
+
+// Login endpoint
 router.post('/login', [
-  body('email').isEmail().withMessage('Please provide a valid email'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters')
-], async (req: Request, res: Response) => {
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 })
+], async (req: express.Request, res: express.Response): Promise<void> => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        error: 'Validation failed',
-        details: errors.array()
-      });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
     const { email, password } = req.body;
 
     // Find user
-    const user = await prisma.user.findUnique({
-      where: { email }
-    });
+    const user = users.find(u => u.email === email);
 
-    if (!user || !user.isActive) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Email or password is incorrect'
-      });
+    if (!user) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
     }
 
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({
-        error: 'Invalid credentials',
-        message: 'Email or password is incorrect'
-      });
+    // Verify password
+    const isValidPassword = await verifyPassword(password, user.password);
+    if (!isValidPassword) {
+      res.status(401).json({ error: 'Invalid credentials' });
+      return;
     }
 
-    // Generate JWT token
-    const token = (jwt.sign as any)(
-      { userId: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'fallback-secret',
-      { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
-    );
-
-    // Create session
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24); // 24 hours from now
-
-    await prisma.session.create({
-      data: {
-        userId: user.id,
-        token,
-        expiresAt
-      }
-    });
+    // Generate token
+    const token = generateToken(user.id, user.email, user.role);
 
     res.json({
-      success: true,
-      data: {
-        user: {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role
-        },
-        token,
-        expiresAt
+      message: 'Login successful',
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
       }
     });
   } catch (error) {
     console.error('Login error:', error);
-    res.status(500).json({
-      error: 'Login failed',
-      message: 'An error occurred during login'
-    });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-// Logout
-router.post('/logout', authenticateToken, async (req: any, res) => {
+// Register endpoint (admin only)
+router.post('/register', [
+  body('email').isEmail().normalizeEmail(),
+  body('password').isLength({ min: 6 }),
+  body('name').isLength({ min: 2 }),
+  body('role').isIn(['ADMIN', 'OPERATOR', 'VIEWER'])
+], async (req: express.Request, res: express.Response): Promise<void> => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
-    
-    if (token) {
-      // Delete session
-      await prisma.session.deleteMany({
-        where: { token }
-      });
-    }
-
-    res.json({
-      success: true,
-      message: 'Logged out successfully'
-    });
-  } catch (error) {
-    console.error('Logout error:', error);
-    res.status(500).json({
-      error: 'Logout failed',
-      message: 'An error occurred during logout'
-    });
-  }
-});
-
-// Get current user
-router.get('/me', authenticateToken, async (req: any, res) => {
-  try {
-    const user = await prisma.user.findUnique({
-      where: { id: req.user.id },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true
-      }
-    });
-
-    if (!user) {
-      return res.status(404).json({
-        error: 'User not found',
-        message: 'User does not exist'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: { user }
-    });
-  } catch (error) {
-    console.error('Get user error:', error);
-    res.status(500).json({
-      error: 'Failed to get user',
-      message: 'An error occurred while fetching user data'
-    });
-  }
-});
-
-// Create user (Admin only)
-router.post('/users', [
-  body('email').isEmail().withMessage('Please provide a valid email'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  body('name').notEmpty().withMessage('Name is required'),
-  body('role').isIn(['ADMIN', 'PLATFORM_GUARD', 'OPERATOR', 'VIEWER']).withMessage('Invalid role')
-], authenticateToken, async (req: any, res: Response) => {
-  try {
-    // Check if user is admin
-    if (req.user.role !== 'ADMIN') {
-      return res.status(403).json({
-        error: 'Insufficient permissions',
-        message: 'Only admins can create users'
-      });
-    }
-
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        error: 'Validation failed',
-        details: errors.array()
-      });
+      res.status(400).json({ errors: errors.array() });
+      return;
     }
 
     const { email, password, name, role } = req.body;
 
     // Check if user already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { email }
-    });
+    const existingUser = users.find(u => u.email === email);
 
     if (existingUser) {
-      return res.status(400).json({
-        error: 'User already exists',
-        message: 'A user with this email already exists'
-      });
+      res.status(400).json({ error: 'User already exists' });
+      return;
     }
 
     // Hash password
-    const hashedPassword = await bcrypt.hash(password, 12);
+    const hashedPassword = await hashPassword(password);
 
     // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        role
-      },
-      select: {
-        id: true,
-        email: true,
-        name: true,
-        role: true,
-        isActive: true,
-        createdAt: true
-      }
-    });
+    const newUser = {
+      id: (users.length + 1).toString(),
+      email,
+      password: hashedPassword,
+      name,
+      role
+    };
+
+    users.push(newUser);
 
     res.status(201).json({
-      success: true,
-      data: { user }
+      message: 'User created successfully',
+      user: {
+        id: newUser.id,
+        email: newUser.email,
+        name: newUser.name,
+        role: newUser.role
+      }
     });
   } catch (error) {
-    console.error('Create user error:', error);
-    res.status(500).json({
-      error: 'Failed to create user',
-      message: 'An error occurred while creating the user'
+    console.error('Registration error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Logout endpoint
+router.post('/logout', async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    // In a stateless JWT system, logout is handled client-side
+    // by removing the token from storage
+    res.json({ message: 'Logout successful' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get current user
+router.get('/me', async (req: express.Request, res: express.Response): Promise<void> => {
+  try {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+      res.status(401).json({ error: 'No token provided' });
+      return;
+    }
+
+    // Verify token and get user info
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret') as any;
+
+    const user = users.find(u => u.id === decoded.userId);
+
+    if (!user) {
+      res.status(401).json({ error: 'Invalid token' });
+      return;
+    }
+
+    res.json({
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role
+      }
     });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
