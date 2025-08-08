@@ -1,1 +1,5 @@
 /venv
+/yolo_results/
+/yolo_results
+yolo_results/output_yolo.mp4
+*.mp4
