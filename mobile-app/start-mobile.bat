@@ -18,10 +18,11 @@ echo React Native: 0.76.9
 echo.
 echo Choose your option:
 echo 1. Start with Expo Go (Recommended)
-echo 2. Try Android Emulator (requires Android Studio)
+echo 2. Android Studio Emulator (requires setup)
 echo 3. Start web version
+echo 4. Check Android setup
 echo.
-set /p choice="Enter your choice (1-3): "
+set /p choice="Enter your choice (1-4): "
 
 if "%choice%"=="1" (
     echo.
@@ -31,13 +32,27 @@ if "%choice%"=="1" (
     npm start
 ) else if "%choice%"=="2" (
     echo.
-    echo Attempting to start Android emulator...
-    echo Note: This requires Android Studio to be properly installed
+    echo Starting Android emulator mode...
+    echo Make sure your Android emulator is running first!
+    echo Checking for connected devices...
+    adb devices 2>nul
+    if %errorlevel% neq 0 (
+        echo.
+        echo ❌ ADB not found. Please run setup-android.bat first
+        pause
+        exit /b 1
+    )
+    echo.
+    echo Launching app on Android emulator...
     npm run android
 ) else if "%choice%"=="3" (
     echo.
     echo Starting web version...
     npm run web
+) else if "%choice%"=="4" (
+    echo.
+    echo Running Android setup check...
+    .\setup-android.bat
 ) else (
     echo Invalid choice. Starting default Expo Go mode...
     npm start

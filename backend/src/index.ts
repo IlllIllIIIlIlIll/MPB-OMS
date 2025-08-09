@@ -21,7 +21,12 @@ const app = express();
 const server = createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: process.env.SOCKET_CORS_ORIGIN || "http://localhost:3002",
+    origin: [
+      process.env.SOCKET_CORS_ORIGIN || "http://192.168.1.21:3002",
+      "http://localhost:3002", // Frontend
+      "http://localhost:8081", // Mobile app web version
+      "http://192.168.1.21:8081", // Mobile app web version (IP)
+    ],
     methods: ["GET", "POST"]
   }
 });
@@ -29,8 +34,27 @@ const io = new Server(server, {
 // Middleware
 app.use(helmet());
 app.use(compression());
+// Configure CORS to allow multiple origins
+const allowedOrigins = [
+  process.env.CORS_ORIGIN || "http://192.168.1.21:3002",
+  "http://localhost:3002", // Frontend
+  "http://localhost:8081", // Mobile app web version
+  "http://192.168.1.21:8081", // Mobile app web version (IP)
+  "exp://192.168.1.21:8081", // Expo development
+];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "http://localhost:3002",
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log('CORS blocked origin:', origin);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true
 }));
 
