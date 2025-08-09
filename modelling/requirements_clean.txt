@@ -1,0 +1,29 @@
+# MPB-OMS Crowd Counting System Requirements
+# Core dependencies for basic functionality
+numpy>=1.23.0
+opencv-python>=4.8.0
+
+# Web server functionality (optional)
+flask>=2.3.2
+flask-cors>=4.0.0
+
+# YOLO-based detection (optional)
+ultralytics>=8.0.192
+supervision>=0.14.0
+
+# Deep learning with CSRNet (optional)
+torch>=1.13.0
+torchvision>=0.14.0
+
+# Data generation and analysis (optional)
+pandas>=1.5.0
+matplotlib>=3.5.0
+
+# Additional tracking dependencies (optional)
+filterpy>=1.4.5
+scipy>=1.10.0
+
+# Image processing and utilities
+Pillow>=10.0.0
+requests>=2.28.0
+
