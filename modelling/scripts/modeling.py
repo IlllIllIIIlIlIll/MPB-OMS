@@ -357,6 +357,12 @@ class BackgroundSubtractionCounter:
         
         return len(self.persons), annotated_frame
 
+    def process_frame_with_data(self, frame):
+        """Process frame and return detection data (compatibility method)"""
+        people_count, annotated_frame = self.process_frame(frame)
+        # Background subtraction doesn't provide individual detection boxes
+        return people_count, annotated_frame, []
+
 
 class YOLOCounter:
     """YOLO-based person detection and counting"""
@@ -373,6 +379,11 @@ class YOLOCounter:
     
     def process_frame(self, frame):
         """Process frame with YOLO detection"""
+        people_count, annotated_frame, _ = self.process_frame_with_data(frame)
+        return people_count, annotated_frame
+    
+    def process_frame_with_data(self, frame):
+        """Process frame with YOLO detection and return detection data"""
         # Run YOLO detection
         results = self.model(frame)[0]
         detections = sv.Detections.from_ultralytics(results)
@@ -397,7 +408,31 @@ class YOLOCounter:
         cv2.putText(annotated_frame, f'Time: {timestamp}', 
                    (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
         
-        return people_count, annotated_frame
+        # Prepare detection data for frontend
+        detections_data = []
+        if len(detections) > 0:
+            for i in range(len(detections)):
+                bbox = detections.xyxy[i]  # [x1, y1, x2, y2]
+                confidence = detections.confidence[i] if detections.confidence is not None else 0.0
+                track_id = detections.tracker_id[i] if detections.tracker_id is not None else None
+                
+                # Scale coordinates to canvas size (640x640)
+                x1, y1, x2, y2 = bbox
+                x = int(x1)
+                y = int(y1) 
+                width = int(x2 - x1)
+                height = int(y2 - y1)
+                
+                detections_data.append({
+                    'x': x,
+                    'y': y,
+                    'width': width,
+                    'height': height,
+                    'confidence': float(confidence),
+                    'track_id': int(track_id) if track_id is not None else None
+                })
+        
+        return people_count, annotated_frame, detections_data
 
 
 # ====================================================================
@@ -408,10 +443,19 @@ if FLASK_AVAILABLE:
     class CrowdCountingServer:
         """Flask web server for real-time crowd counting"""
         
-        def __init__(self):
+        def __init__(self, use_yolo=True):
             self.app = Flask(__name__)
             CORS(self.app, origins="*")
-            self.counter = BackgroundSubtractionCounter()
+            
+            # Choose detection method - FORCE YOLO
+            if not YOLO_AVAILABLE:
+                print("ERROR: YOLO not available! Please install ultralytics and supervision")
+                raise ImportError("YOLO dependencies missing")
+            
+            print("🚀 FORCING YOLO detection for better accuracy...")
+            self.counter = YOLOCounter()
+            self.use_yolo = True
+            
             self.setup_routes()
         
         def setup_routes(self):
@@ -433,9 +477,19 @@ if FLASK_AVAILABLE:
                 <body>
                     <div class="container">
                         <h1>MPB-OMS Live Crowd Counter</h1>
-                        <video id="video" width="640" height="480" autoplay playsinline></video>
-                        <canvas id="canvas" width="640" height="480"></canvas>
-                        <div class="count">People Count: <span id="count">0</span></div>
+                        <div style="position: relative; display: inline-block;">
+                            <video id="video" width="640" height="640" autoplay playsinline style="border: 2px solid #333;"></video>
+                            <canvas id="canvas" width="640" height="640" style="display: none;"></canvas>
+                            <div id="countingLine" style="position: absolute; top: 0; bottom: 0; left: 50%; width: 3px; background: #00ff00; z-index: 10;"></div>
+                            <canvas id="overlay" width="640" height="640" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                        </div>
+                        <div style="margin: 20px;">
+                            <div class="count">Current People: <span id="count">0</span></div>
+                            <div class="count">Line Crossings: <span id="lineCount">0</span></div>
+                            <div style="font-size: 14px; color: #666; margin-top: 10px;">
+                                Green line: Cross left→right (+1), right→left (-1)
+                            </div>
+                        </div>
                         <button onclick="startCamera()">Start Camera</button>
                         <button onclick="stopCamera()">Stop Camera</button>
                     </div>
@@ -444,21 +498,62 @@ if FLASK_AVAILABLE:
                         const video = document.getElementById('video');
                         const canvas = document.getElementById('canvas');
                         const context = canvas.getContext('2d');
+                        const overlay = document.getElementById('overlay');
+                        const overlayContext = overlay.getContext('2d');
                         const countSpan = document.getElementById('count');
+                        const lineCountSpan = document.getElementById('lineCount');
                         let stream = null;
                         let isProcessing = false;
+                        let lineCount = 0;
+                        let trackedPersons = new Map(); // Track person positions for line crossing
                         
                         async function startCamera() {
                             try {
+                                // Check if MediaDevices API is available
+                                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                                    throw new Error('Camera API not supported. Please use a modern browser (Chrome, Firefox, Safari, Edge) with HTTPS.');
+                                }
+                                
+                                // Check if we're on a secure context (HTTPS)
+                                if (!window.isSecureContext) {
+                                    throw new Error('Camera access requires HTTPS. Please access via https://192.168.1.113:5000/ or https://localhost:5000/');
+                                }
+                                
                                 stream = await navigator.mediaDevices.getUserMedia({
-                                    video: { facingMode: 'environment' }
+                                    video: { 
+                                        facingMode: 'environment',
+                                        width: { ideal: 640 },
+                                        height: { ideal: 640 }
+                                    }
                                 });
                                 video.srcObject = stream;
                                 video.play();
                                 setInterval(processFrame, 500); // Process every 500ms
+                                
+                                console.log('Camera started successfully');
                             } catch (err) {
                                 console.error('Error accessing camera:', err);
-                                alert('Error accessing camera. Please check permissions.');
+                                
+                                let errorMsg = 'Error accessing camera: ' + err.message;
+                                
+                                if (err.name === 'NotAllowedError') {
+                                    errorMsg = 'Camera access denied. Please allow camera permissions and try again.';
+                                } else if (err.name === 'NotFoundError') {
+                                    errorMsg = 'No camera found. Please connect a camera and try again.';
+                                } else if (err.name === 'NotSupportedError') {
+                                    errorMsg = 'Camera not supported by this browser. Please use Chrome, Firefox, Safari, or Edge.';
+                                } else if (err.message.includes('HTTPS') || err.message.includes('secure')) {
+                                    errorMsg = 'Camera requires HTTPS. Please visit: https://192.168.1.113:5000/ or https://localhost:5000/';
+                                }
+                                
+                                alert(errorMsg);
+                                
+                                // Debug information
+                                console.log('Debug info:');
+                                console.log('- Current URL:', window.location.href);
+                                console.log('- Secure context:', window.isSecureContext);
+                                console.log('- MediaDevices available:', !!navigator.mediaDevices);
+                                console.log('- getUserMedia available:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
                             }
                         }
                         
@@ -474,6 +569,7 @@ if FLASK_AVAILABLE:
                             isProcessing = true;
                             
                             try {
+                                // Draw current video frame to hidden canvas for processing
                                 context.drawImage(video, 0, 0, canvas.width, canvas.height);
                                 const frameData = canvas.toDataURL('image/jpeg', 0.8);
                                 
@@ -484,7 +580,32 @@ if FLASK_AVAILABLE:
                                 });
                                 
                                 const data = await response.json();
+                                
+                                // Debug logging
+                                console.log(`🔍 Frame processed - People: ${data.people_count}, Detections: ${data.detections ? data.detections.length : 0}`);
+                                if (data.detections && data.detections.length > 0) {
+                                    console.log('📦 Detection data:', data.detections);
+                                }
+                                
+                                // Update people count
                                 countSpan.textContent = data.people_count || 0;
+                                
+                                // Clear overlay for new frame
+                                overlayContext.clearRect(0, 0, overlay.width, overlay.height);
+                                
+                                // Process detection data for line crossing
+                                if (data.detections && data.detections.length > 0) {
+                                    console.log('🎯 Processing detections for line crossing...');
+                                    processLineCrossing(data.detections);
+                                    console.log('📐 Drawing detection boxes...');
+                                    drawDetections(data.detections);
+                                } else {
+                                    console.log('❌ No detections received');
+                                }
+                                
+                                // Draw counting line on overlay
+                                drawCountingLine();
+                                
                             } catch (error) {
                                 console.error('Error processing frame:', error);
                             } finally {
@@ -492,8 +613,122 @@ if FLASK_AVAILABLE:
                             }
                         }
                         
-                        // Auto-start camera
-                        startCamera();
+                        function drawDetections(detections) {
+                            console.log(`🖼️ Drawing ${detections.length} detection boxes...`);
+                            detections.forEach((detection, index) => {
+                                const { x, y, width, height, confidence, track_id } = detection;
+                                console.log(`   Box ${index}: x=${x}, y=${y}, w=${width}, h=${height}, id=${track_id}`);
+                                
+                                // Draw bounding box on overlay
+                                overlayContext.strokeStyle = '#00ff00';
+                                overlayContext.lineWidth = 3;
+                                overlayContext.strokeRect(x, y, width, height);
+                                console.log(`   ✅ Drew green box at (${x}, ${y}) size ${width}x${height}`);
+                                
+                                // Draw label with background
+                                const label = `Person ${track_id || ''} (${(confidence * 100).toFixed(1)}%)`;
+                                overlayContext.font = '16px Arial';
+                                const textWidth = overlayContext.measureText(label).width;
+                                
+                                // Background for text
+                                overlayContext.fillStyle = 'rgba(0, 255, 0, 0.8)';
+                                overlayContext.fillRect(x, y - 25, textWidth + 10, 20);
+                                
+                                // Text
+                                overlayContext.fillStyle = '#000000';
+                                overlayContext.fillText(label, x + 5, y - 8);
+                                console.log(`   ✅ Drew label: ${label}`);
+                            });
+                        }
+                        
+                        function drawCountingLine() {
+                            const lineX = overlay.width / 2;
+                            overlayContext.strokeStyle = '#00ff00';
+                            overlayContext.lineWidth = 4;
+                            overlayContext.beginPath();
+                            overlayContext.moveTo(lineX, 0);
+                            overlayContext.lineTo(lineX, overlay.height);
+                            overlayContext.stroke();
+                            
+                            // Draw line label
+                            overlayContext.fillStyle = 'rgba(0, 255, 0, 0.8)';
+                            overlayContext.fillRect(lineX + 5, 10, 100, 20);
+                            overlayContext.fillStyle = '#000000';
+                            overlayContext.font = 'bold 14px Arial';
+                            overlayContext.fillText('Counting Line', lineX + 10, 25);
+                        }
+                        
+                        function processLineCrossing(detections) {
+                            const lineX = canvas.width / 2; // Vertical line at center (320)
+                            const lineThreshold = 50; // Bigger threshold for more reliable detection
+                            
+                            console.log(`🎯 Line crossing check: Line at X=${lineX}, Threshold=${lineThreshold}`);
+                            
+                            detections.forEach(detection => {
+                                const { x, y, width, height, track_id } = detection;
+                                
+                                // Calculate TRUE CENTER POINT of the detection box
+                                const centerX = x + (width / 2);
+                                const centerY = y + (height / 2);
+                                
+                                console.log(`👤 Person ${track_id}: Box(${x},${y}) Size(${width}x${height}) Center(${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
+                                
+                                if (track_id) {
+                                    const prevPos = trackedPersons.get(track_id);
+                                    
+                                    if (prevPos) {
+                                        // Check if person's CENTER crossed the vertical line
+                                        const prevX = prevPos.x;
+                                        const currentX = centerX;
+                                        
+                                        console.log(`   📍 Movement: ${prevX.toFixed(1)} → ${currentX.toFixed(1)} (Line at ${lineX})`);
+                                        
+                                        // Crossed from left to right (prevX < lineX, currentX > lineX)
+                                        if (prevX < (lineX - lineThreshold) && currentX > (lineX + lineThreshold)) {
+                                            lineCount++;
+                                            lineCountSpan.textContent = lineCount;
+                                            console.log(`🔵 ✅ CROSSING DETECTED: Person ${track_id} crossed LEFT→RIGHT. Count: ${lineCount}`);
+                                            console.log(`   🎯 Coordinates: ${prevX.toFixed(1)} → ${currentX.toFixed(1)} (crossed line at ${lineX})`);
+                                        }
+                                        // Crossed from right to left (prevX > lineX, currentX < lineX)
+                                        else if (prevX > (lineX + lineThreshold) && currentX < (lineX - lineThreshold)) {
+                                            lineCount--;
+                                            lineCountSpan.textContent = lineCount;
+                                            console.log(`🔴 ✅ CROSSING DETECTED: Person ${track_id} crossed RIGHT→LEFT. Count: ${lineCount}`);
+                                            console.log(`   🎯 Coordinates: ${prevX.toFixed(1)} → ${currentX.toFixed(1)} (crossed line at ${lineX})`);
+                                        } else {
+                                            console.log(`   ⏸️  No crossing (within threshold or same side)`);
+                                        }
+                                    } else {
+                                        console.log(`   🆕 New person ${track_id} - tracking started`);
+                                    }
+                                    
+                                    // Update position with current CENTER coordinates
+                                    trackedPersons.set(track_id, { x: centerX, y: centerY });
+                                }
+                            });
+                        }
+                        
+                        // Check status and conditionally auto-start camera
+                        document.addEventListener('DOMContentLoaded', function() {
+                            console.log('Page loaded. Checking camera support...');
+                            console.log('- Current URL:', window.location.href);
+                            console.log('- Secure context:', window.isSecureContext);
+                            console.log('- MediaDevices available:', !!navigator.mediaDevices);
+                            
+                            // Only auto-start if conditions are met
+                            if (window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                                console.log('Auto-starting camera...');
+                                setTimeout(startCamera, 1000); // Small delay to let page fully load
+                            } else {
+                                console.log('Camera auto-start skipped. Manual start required.');
+                                let reason = 'Reasons: ';
+                                if (!window.isSecureContext) reason += 'Not HTTPS, ';
+                                if (!navigator.mediaDevices) reason += 'No MediaDevices API, ';
+                                if (!navigator.mediaDevices?.getUserMedia) reason += 'No getUserMedia, ';
+                                console.log(reason);
+                            }
+                        });
                     </script>
                 </body>
                 </html>
@@ -519,18 +754,35 @@ if FLASK_AVAILABLE:
                         return jsonify({'error': 'Failed to decode frame'}), 400
                     
                     # Process frame
-                    people_count, _ = self.counter.process_frame(frame)
+                    people_count, annotated_frame, detections_data = self.counter.process_frame_with_data(frame)
+                    
+                    # Debug: Only log when there are people detected
+                    if people_count > 0:
+                        print(f"🎯 YOLO Detection: {people_count} people, {len(detections_data)} detection boxes")
+                        if len(detections_data) > 0:
+                            print(f"   First detection: {detections_data[0]}")
                     
                     return jsonify({
                         'people_count': people_count,
-                        'timestamp': time.time()
+                        'timestamp': time.time(),
+                        'detections': detections_data
                     })
                 
                 except Exception as e:
                     return jsonify({'error': str(e)}), 500
         
-        def run(self, host='0.0.0.0', port=5000, debug=False):
-            self.app.run(host=host, port=port, debug=debug, threaded=True)
+        def run(self, host='0.0.0.0', port=5000, debug=False, ssl_context=None):
+            if ssl_context:
+                print(f"Starting HTTPS server on https://{host}:{port}/")
+            else:
+                print(f"Starting HTTP server on http://{host}:{port}/")
+            
+            # Disable Flask's default request logging
+            import logging
+            log = logging.getLogger('werkzeug')
+            log.setLevel(logging.ERROR)
+            
+            self.app.run(host=host, port=port, debug=debug, threaded=True, ssl_context=ssl_context)
 
 
 # ====================================================================
@@ -610,6 +862,7 @@ def main():
     parser.add_argument('--output', help='Output file path')
     parser.add_argument('--tracking', action='store_true', help='Enable tracking visualization')
     parser.add_argument('--port', type=int, default=5000, help='Server port (server mode)')
+    parser.add_argument('--ssl', action='store_true', help='Enable HTTPS with SSL certificate')
     parser.add_argument('--records', type=int, default=1000, help='Number of records (data mode)')
     
     args = parser.parse_args()
@@ -727,9 +980,32 @@ def main():
             print("Error: Flask dependencies not available")
             return
         
-        print(f"Starting web server on port {args.port}...")
-        server = CrowdCountingServer()
-        server.run(port=args.port)
+        ssl_context = None
+        if args.ssl:
+            # Check for SSL certificates
+            certs_dir = Path(__file__).parent.parent / "certs"
+            cert_file = certs_dir / "cert.pem"
+            key_file = certs_dir / "key.pem"
+            
+            if cert_file.exists() and key_file.exists():
+                ssl_context = (str(cert_file), str(key_file))
+                print(f"Using SSL certificates from {certs_dir}")
+            else:
+                print("SSL certificates not found. Run generate_ssl_cert.py first.")
+                print("Generating certificates now...")
+                try:
+                    sys.path.append(str(Path(__file__).parent))
+                    from generate_ssl_cert import generate_ssl_certificate
+                    cert_path, key_path = generate_ssl_certificate()
+                    if cert_path and key_path:
+                        ssl_context = (cert_path, key_path)
+                except Exception as e:
+                    print(f"Error generating certificates: {e}")
+                    print("Starting without SSL...")
+        
+        # Use YOLO by default for better detection (even when people are stationary)
+        server = CrowdCountingServer(use_yolo=True)
+        server.run(port=args.port, ssl_context=ssl_context)
     
     elif args.mode == 'data':
         if not PANDAS_AVAILABLE:

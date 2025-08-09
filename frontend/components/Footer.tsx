@@ -31,15 +31,18 @@ export default function Footer() {
   }
 
   return (
-    <div className="bg-blue-800 text-white px-8 py-3 mt-auto">
+    <div className="bg-blue-800 text-white px-8 py-3">
       <div className="flex items-center justify-between">
-        <div className="text-sm">
-          Panglima TNI Jenderal Andika Perkasa mengungkapkan tiga orang prajurit T
+        <div className="text-sm overflow-hidden flex-1 mr-8">
+          <div className="whitespace-nowrap animate-marquee">
+            Panglima TNI Jenderal Andika Perkasa mengungkapkan tiga orang prajurit TNI telah terlibat dalam insiden tersebut dan sedang menjalani proses investigasi menyeluruh. Keputusan tegas akan diambil sesuai dengan hukum yang berlaku untuk menjaga kredibilitas dan integritas institusi TNI dalam melayani bangsa dan negara.
+          </div>
         </div>
         <div className="flex items-center gap-4">
           <div className="text-2xl font-bold">
             {formatTime(currentTime)}
           </div>
+          <div className="w-px h-6 bg-white"></div>
           <div className="text-sm">
             {formatDate(currentTime)}
           </div>

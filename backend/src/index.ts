@@ -102,7 +102,9 @@ console.log('🛣️ Registered routes:')
 console.log('  - GET /health')
 console.log('  - GET /status')
 console.log('  - GET /api/auth/*')
-console.log('  - GET /api/occupancy/*')
+console.log('  - GET /api/occupancy/now')
+console.log('  - GET /api/occupancy/formatted')
+console.log('  - GET /api/occupancy/:busId')
 console.log('  - POST /api/occupancy/ingest')
 
 // Add request logging middleware

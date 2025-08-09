@@ -5,13 +5,16 @@ export default function Header() {
     <div className="bg-blue-800 text-white px-4 py-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Image 
-            src="/TJ-Putih 1.png" 
-            alt="TransJakarta Logo"
-            width={48}
-            height={48}
-            className="w-12 h-12"
-          />
+          <div className="w-16 h-16 bg-transparent rounded-lg flex items-center justify-center border border-transparent">
+            <Image 
+              src="/TJ-Putih 1.png" 
+              alt="TransJakarta Logo"
+              width={48}
+              height={48}
+              className="w-12 h-12 object-contain"
+            />
+          </div>
+          <div className="w-px h-8 bg-white mx-2"></div>
           <h1 className="text-2xl font-bold">Cempaka Mas Arah Pulo Gadung</h1>
         </div>
         
