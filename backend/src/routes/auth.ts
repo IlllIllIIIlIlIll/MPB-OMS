@@ -10,14 +10,14 @@ const users = [
   {
     id: '1',
     email: 'admin@tj-oms.com',
-    password: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KqKqKq', // admin123
+    password: '$2a$12$cQtSRt5Pa6JONggYxkq0eOahWJ.LJuEpnpcQQAZKBvCa/q6cjQECq', // admin123
     name: 'System Administrator',
     role: 'ADMIN'
   },
   {
     id: '2',
     email: 'operator@tj-oms.com',
-    password: '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/8KqKqKq', // admin123
+    password: '$2a$12$cQtSRt5Pa6JONggYxkq0eOahWJ.LJuEpnpcQQAZKBvCa/q6cjQECq', // admin123
     name: 'TransJakarta Operator',
     role: 'OPERATOR'
   }
