@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>iPhone Camera Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #000;
+            color: #fff;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 100vw;
+            padding: 10px;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 20px 0;
+            background: #1a1a1a;
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+        
+        .server-config {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .server-config input {
+            width: 100%;
+            padding: 12px;
+            font-size: 16px;
+            border: 1px solid #444;
+            border-radius: 8px;
+            background: #333;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        
+        .video-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #video {
+            width: 100%;
+            height: auto;
+            display: block;
+            background: #000;
+        }
+        
+        #canvas {
+            display: none;
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+        
+        button {
+            padding: 15px 25px;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 25px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+        
+        .btn-primary {
+            background: #007AFF;
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            background: #0056CC;
+        }
+        
+        .btn-danger {
+            background: #FF3B30;
+            color: white;
+        }
+        
+        .btn-danger:hover:not(:disabled) {
+            background: #CC2E24;
+        }
+        
+        .btn-success {
+            background: #34C759;
+            color: white;
+        }
+        
+        .btn-success:hover:not(:disabled) {
+            background: #28A745;
+        }
+        
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+        
+        .status.connected {
+            background: #1B5E20;
+            color: #4CAF50;
+        }
+        
+        .status.error {
+            background: #B71C1C;
+            color: #F44336;
+        }
+        
+        .status.warning {
+            background: #E65100;
+            color: #FF9800;
+        }
+        
+        .stats {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .stats h3 {
+            margin-bottom: 15px;
+            color: #007AFF;
+        }
+        
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            padding: 8px 0;
+            border-bottom: 1px solid #444;
+        }
+        
+        .stat-row:last-child {
+            border-bottom: none;
+        }
+        
+        .people-count {
+            font-size: 32px;
+            font-weight: bold;
+            color: #34C759;
+            text-align: center;
+            padding: 20px;
+            background: #1a1a1a;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .debug-info {
+            background: #1a1a1a;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .debug-info h4 {
+            margin-bottom: 10px;
+            color: #007AFF;
+        }
+        
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .log-error {
+            color: #FF3B30;
+        }
+        
+        .log-success {
+            color: #34C759;
+        }
+        
+        .log-info {
+            color: #007AFF;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📱 iPhone Camera Stream</h1>
+            <p>Safari Camera to Mac Detection</p>
+        </div>
+        
+        <div class="server-config">
+            <label for="serverUrl">Flask Server URL:</label>
+            <input type="text" id="serverUrl" value="http://192.168.1.100:5000" placeholder="http://your-mac-ip:5000">
+            <button class="btn-primary" onclick="updateServerUrl()">Update Server</button>
+        </div>
+        
+        <div class="controls">
+            <button id="startBtn" class="btn-primary" onclick="startCamera()">Start Camera</button>
+            <button id="stopBtn" class="btn-danger" onclick="stopCamera()" disabled>Stop Camera</button>
+            <button id="streamBtn" class="btn-success" onclick="toggleStream()" disabled>Start Stream</button>
+        </div>
+        
+        <div id="status" class="status warning">
+            📷 Camera: Stopped | 📡 Stream: Disconnected
+        </div>
+        
+        <div class="video-container">
+            <video id="video" autoplay muted playsinline webkit-playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        
+        <div class="people-count">
+            👥 People Detected: <span id="peopleCount">0</span>
+        </div>
+        
+        <div class="stats">
+            <h3>📊 Stream Statistics</h3>
+            <div class="stat-row">
+                <span>Frames Sent:</span>
+                <span id="framesSent">0</span>
+            </div>
+            <div class="stat-row">
+                <span>Stream FPS:</span>
+                <span id="streamFps">0.0</span>
+            </div>
+            <div class="stat-row">
+                <span>Last Response:</span>
+                <span id="lastUpdate">Never</span>
+            </div>
+            <div class="stat-row">
+                <span>Connection Status:</span>
+                <span id="connectionStatus">Disconnected</span>
+            </div>
+        </div>
+        
+        <div class="debug-info">
+            <h4>🔧 Debug Log</h4>
+            <div id="debugLog"></div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let ctx = canvas.getContext('2d');
+        let stream = null;
+        let streaming = false;
+        let streamInterval = null;
+        let framesSent = 0;
+        let lastFrameTime = 0;
+        let serverUrl = 'http://192.168.1.100:5000';
+        let debugLog = [];
+        
+        // Debug logging function
+        function addDebugLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            debugLog.push({message: logEntry, type: type});
+            
+            // Keep only last 20 entries
+            if (debugLog.length > 20) {
+                debugLog.shift();
+            }
+            
+            updateDebugDisplay();
+            console.log(logEntry);
+        }
+        
+        function updateDebugDisplay() {
+            const debugElement = document.getElementById('debugLog');
+            debugElement.innerHTML = debugLog.map(entry => 
+                `<div class="log-entry log-${entry.type}">${entry.message}</div>`
+            ).join('');
+            debugElement.scrollTop = debugElement.scrollHeight;
+        }
+        
+        // Update server URL
+        function updateServerUrl() {
+            const input = document.getElementById('serverUrl');
+            serverUrl = input.value.trim();
+            if (!serverUrl.startsWith('http')) {
+                serverUrl = 'http://' + serverUrl;
+            }
+            addDebugLog(`Server URL updated to: ${serverUrl}`, 'info');
+        }
+        
+        // Start camera with Safari-specific constraints
+        async function startCamera() {
+            addDebugLog('Attempting to start camera...', 'info');
+            
+            try {
+                // Safari-specific constraints
+                const constraints = {
+                    video: {
+                        width: { ideal: 640, max: 1280 },
+                        height: { ideal: 480, max: 720 },
+                        facingMode: 'environment', // Use back camera
+                        frameRate: { ideal: 30, max: 30 }
+                    },
+                    audio: false
+                };
+                
+                addDebugLog('Requesting camera permissions...', 'info');
+                
+                // Request camera access
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                
+                addDebugLog('Camera permission granted!', 'success');
+                
+                // Set video source
+                video.srcObject = stream;
+                
+                // Wait for video to load
+                video.onloadedmetadata = function() {
+                    addDebugLog(`Video loaded: ${video.videoWidth}x${video.videoHeight}`, 'success');
+                    
+                    // Set canvas size to match video
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    
+                    // Update UI
+                    document.getElementById('startBtn').disabled = true;
+                    document.getElementById('stopBtn').disabled = false;
+                    document.getElementById('streamBtn').disabled = false;
+                    
+                    updateStatus('📷 Camera: Active | 📡 Stream: Ready');
+                    addDebugLog('Camera started successfully!', 'success');
+                };
+                
+                video.onerror = function(e) {
+                    addDebugLog(`Video error: ${e.message}`, 'error');
+                };
+                
+            } catch (err) {
+                addDebugLog(`Camera error: ${err.name} - ${err.message}`, 'error');
+                
+                // Provide specific error messages
+                if (err.name === 'NotAllowedError') {
+                    alert('❌ Camera permission denied. Please allow camera access in Safari settings.');
+                } else if (err.name === 'NotFoundError') {
+                    alert('❌ No camera found on this device.');
+                } else if (err.name === 'NotSupportedError') {
+                    alert('❌ Camera not supported. Try using HTTPS or a different browser.');
+                } else {
+                    alert(`❌ Camera error: ${err.message}`);
+                }
+                
+                updateStatus('📷 Camera: Error | 📡 Stream: Disconnected');
+            }
+        }
+        
+        // Stop camera
+        function stopCamera() {
+            addDebugLog('Stopping camera...', 'info');
+            
+            if (stream) {
+                stream.getTracks().forEach(track => {
+                    track.stop();
+                    addDebugLog(`Stopped track: ${track.kind}`, 'info');
+                });
+                stream = null;
+            }
+            
+            if (streamInterval) {
+                clearInterval(streamInterval);
+                streamInterval = null;
+                streaming = false;
+            }
+            
+            // Reset UI
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = true;
+            document.getElementById('streamBtn').disabled = true;
+            document.getElementById('streamBtn').textContent = 'Start Stream';
+            
+            updateStatus('📷 Camera: Stopped | 📡 Stream: Disconnected');
+            addDebugLog('Camera stopped', 'info');
+        }
+        
+        // Toggle streaming
+        function toggleStream() {
+            if (streaming) {
+                stopStreaming();
+            } else {
+                startStreaming();
+            }
+        }
+        
+        // Start streaming frames
+        function startStreaming() {
+            if (!stream) {
+                alert('Please start the camera first');
+                return;
+            }
+            
+            addDebugLog('Starting frame streaming...', 'info');
+            streaming = true;
+            document.getElementById('streamBtn').textContent = 'Stop Stream';
+            document.getElementById('streamBtn').className = 'btn-danger';
+            updateStatus('📷 Camera: Active | 📡 Stream: Streaming...');
+            
+            // Send frame every 1000ms (1 FPS)
+            streamInterval = setInterval(sendFrame, 1000);
+        }
+        
+        // Stop streaming
+        function stopStreaming() {
+            addDebugLog('Stopping frame streaming...', 'info');
+            streaming = false;
+            
+            if (streamInterval) {
+                clearInterval(streamInterval);
+                streamInterval = null;
+            }
+            
+            document.getElementById('streamBtn').textContent = 'Start Stream';
+            document.getElementById('streamBtn').className = 'btn-success';
+            updateStatus('📷 Camera: Active | 📡 Stream: Ready');
+        }
+        
+        // Send frame to server
+        async function sendFrame() {
+            if (!streaming || !video.videoWidth || !video.videoHeight) {
+                return;
+            }
+            
+            try {
+                // Draw current video frame to canvas
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
+                // Convert canvas to base64 JPEG with compression
+                const dataURL = canvas.toDataURL('image/jpeg', 0.7);
+                const base64Data = dataURL.split(',')[1];
+                
+                addDebugLog(`Sending frame ${framesSent + 1} (${Math.round(base64Data.length / 1024)}KB)`, 'info');
+                
+                // Send to server
+                const response = await fetch(serverUrl + '/upload', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        frame: base64Data,
+                        timestamp: Date.now(),
+                        frame_number: framesSent + 1
+                    }),
+                    timeout: 5000
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    
+                    // Update UI with results
+                    document.getElementById('peopleCount').textContent = result.people_count || 0;
+                    document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                    document.getElementById('connectionStatus').textContent = 'Connected ✅';
+                    
+                    framesSent++;
+                    document.getElementById('framesSent').textContent = framesSent;
+                    
+                    // Calculate FPS
+                    const now = Date.now();
+                    if (lastFrameTime > 0) {
+                        const fps = (1000 / (now - lastFrameTime)).toFixed(1);
+                        document.getElementById('streamFps').textContent = fps;
+                    }
+                    lastFrameTime = now;
+                    
+                    updateStatus('📷 Camera: Active | 📡 Stream: Connected ✅');
+                    addDebugLog(`Frame processed: ${result.people_count} people detected`, 'success');
+                    
+                } else {
+                    addDebugLog(`Server error: ${response.status} ${response.statusText}`, 'error');
+                    document.getElementById('connectionStatus').textContent = 'Server Error ❌';
+                    updateStatus('📷 Camera: Active | 📡 Stream: Server Error');
+                }
+                
+            } catch (error) {
+                addDebugLog(`Network error: ${error.message}`, 'error');
+                document.getElementById('connectionStatus').textContent = 'Network Error ❌';
+                updateStatus('📷 Camera: Active | 📡 Stream: Network Error');
+            }
+        }
+        
+        // Update status display
+        function updateStatus(message) {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = message;
+            
+            if (message.includes('Connected') || message.includes('✅')) {
+                statusEl.className = 'status connected';
+            } else if (message.includes('Error') || message.includes('❌')) {
+                statusEl.className = 'status error';
+            } else {
+                statusEl.className = 'status warning';
+            }
+        }
+        
+        // Initialize
+        document.getElementById('serverUrl').value = serverUrl;
+        addDebugLog('iPhone Camera Stream initialized', 'info');
+        addDebugLog('Make sure your Mac and iPhone are on the same WiFi network', 'info');
+        
+        // Check for HTTPS
+        if (location.protocol !== 'https:' && location.hostname !== 'localhost') {
+            addDebugLog('⚠️ WARNING: Using HTTP. Safari may require HTTPS for camera access', 'error');
+        }
+        
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden && streaming) {
+                addDebugLog('Page hidden, pausing stream', 'info');
+                stopStreaming();
+            }
+        });
+        
+        // Prevent screen from sleeping
+        let wakeLock = null;
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    addDebugLog('Screen wake lock acquired', 'success');
+                }
+            } catch (err) {
+                addDebugLog('Wake lock not supported or failed', 'info');
+            }
+        }
+        
+        // Request wake lock when streaming starts
+        document.getElementById('streamBtn').addEventListener('click', function() {
+            if (!streaming) {
+                requestWakeLock();
+            }
+        });
+        
+        // Test server connection
+        async function testConnection() {
+            try {
+                const response = await fetch(serverUrl + '/test');
+                if (response.ok) {
+                    addDebugLog('✅ Server connection test successful', 'success');
+                } else {
+                    addDebugLog('❌ Server connection test failed', 'error');
+                }
+            } catch (error) {
+                addDebugLog(`❌ Server connection test failed: ${error.message}`, 'error');
+            }
+        }
+        
+        // Test connection on load
+        setTimeout(testConnection, 1000);
+    </script>
+</body>
+</html>

@@ -2,6 +2,26 @@
 
 A backend-heavy Occupancy Management System designed for TransJakarta operators to monitor real-time bus occupancy. The system integrates with edge devices (Jetson/RPi + Camera) that detect passenger movement and provides a simplified UI focused on displaying occupancy information prominently.
 
+## 🚀 **Quick Start (All OS)**
+
+| Operating System | Command | Description |
+|------------------|---------|-------------|
+| **Windows (PowerShell)** | `.\start-all.ps1` | 🎯 **Single command** to start everything |
+| **Windows (CMD)** | `start-all.bat` | 🎯 **Single command** to start everything |
+| **macOS/Linux** | `./start-all.sh` | 🎯 **Single command** to start everything |
+
+### 📋 **What Gets Started:**
+1. **Frontend** (Port 3002) - Bus display dashboard
+2. **Backend** (Port 3001) - API server with YOLO integration  
+3. **YOLO Modelling** (Port 8081) - AI camera service
+
+### 🌐 **Access URLs:**
+- **🚌 Bus Display:** http://localhost:3002
+- **📷 Camera:** http://localhost:8081
+- **📊 API:** http://localhost:3001/api/occupancy/now
+
+---
+
 ## 🚀 Complete Infrastructure
 
 ### High-Priority Components Implemented ✅
@@ -74,22 +94,84 @@ A backend-heavy Occupancy Management System designed for TransJakarta operators 
 - **Recommendation Worker**: Analyzes hotspots, generates recommendations
 - **Scheduled Jobs**: Periodic analysis every 60 seconds
 
-## 🚀 Quick Start with Docker
+## 🚀 Quick Start (All Operating Systems)
 
 ### Prerequisites
-- **Docker** and **Docker Compose**
+- **Node.js 18+** and **npm**
+- **Python 3.8+** (for YOLO modelling)
 - **4GB RAM** minimum (8GB recommended)
 - **10GB disk space**
 
-### 1. Clone and Setup
+### 🎯 **Single Command Start (Recommended)**
+
+#### **Windows (PowerShell)**
+```powershell
+# In project root directory
+.\start-all.ps1
+```
+
+#### **Windows (Command Prompt)**
+```cmd
+# In project root directory
+start-all.bat
+```
+
+#### **macOS/Linux**
+```bash
+# In project root directory
+chmod +x start-all.sh
+./start-all.sh
+```
+
+### 🔧 **Manual Start (Alternative)**
+
+#### **1. Clone and Setup**
 ```bash
 git clone <repository-url>
 cd MPB-OMS
 ```
 
-### 2. Start Complete Infrastructure
+#### **2. Install Dependencies**
 ```bash
-# Start all services
+# Backend dependencies
+cd backend
+npm install
+cd ..
+
+# Frontend dependencies  
+cd frontend
+npm install
+cd ..
+
+# Python dependencies (for YOLO)
+cd modelling
+pip install -r requirements.txt
+cd ..
+```
+
+#### **3. Start Services (in separate terminals)**
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
+npm run dev
+```
+
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+```
+
+**Terminal 3 - YOLO Modelling:**
+```bash
+cd modelling
+python app.py
+```
+
+### 🚀 **Docker Alternative (Advanced Users)**
+```bash
+# Start all services with Docker
 docker-compose up -d
 
 # Check status
@@ -107,11 +189,17 @@ docker-compose exec backend npm run db:seed
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| **Frontend** | http://localhost:3002 | OMS Dashboard |
-| **Backend API** | http://localhost:3001 | REST API |
-| **MQTT Dashboard** | http://localhost:18083 | EMQX Management |
-| **Redis Commander** | http://localhost:8081 | Redis Management |
-| **Adminer** | http://localhost:8080 | Database Management |
+| **Frontend Display** | http://localhost:3002 | 🚌 Real-time bus occupancy display |
+| **Backend API** | http://localhost:3001 | 🔧 REST API for occupancy data |
+| **YOLO Camera** | http://localhost:8081 | 📷 AI-powered people counting |
+| **YOLO API** | http://localhost:8081/api/occupancy | 📊 Real-time occupancy count data |
+
+### 🎯 **What Each Service Does**
+
+- **Frontend (Port 3002)**: Displays real-time bus schedules with AI-powered occupancy counts
+- **Backend (Port 3001)**: Provides API endpoints and integrates YOLO occupancy data
+- **YOLO Modelling (Port 8081)**: Computer vision service that counts people entering/exiting
+- **Integration**: Backend fetches real-time occupancy from YOLO and updates bus data automatically
 
 ### 5. Test Edge Device Integration
 ```bash
@@ -319,7 +407,57 @@ kubectl scale deployment oms-recommendation --replicas=2
 
 ## 🔧 Troubleshooting
 
-### Common Issues
+### 🚀 **Single Command Start Issues**
+
+1. **PowerShell Execution Policy Error**
+   ```powershell
+   # Run as Administrator, then:
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+
+2. **Port Already in Use**
+   ```bash
+   # Windows
+   netstat -ano | findstr :3001
+   netstat -ano | findstr :3002
+   netstat -ano | findstr :8081
+   
+   # macOS/Linux
+   lsof -i :3001
+   lsof -i :3002
+   lsof -i :8081
+   ```
+
+3. **Service Health Check Failed**
+   - Ensure no other instances are running
+   - Check if ports are available
+   - Restart the script: `.\start-all.ps1`
+
+### 🔧 **Manual Start Issues**
+
+1. **Backend Won't Start**
+   ```bash
+   cd backend
+   npm install
+   npm run build
+   npm run dev
+   ```
+
+2. **Frontend Won't Start**
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+3. **YOLO Service Won't Start**
+   ```bash
+   cd modelling
+   pip install -r requirements.txt
+   python app.py
+   ```
+
+### 🐳 **Docker Issues (Advanced Users)**
 
 1. **MQTT Connection Failed**
    ```bash

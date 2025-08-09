@@ -1,6 +1,7 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { createClient } from 'redis';
+import { yoloService } from '../services/yoloService';
 
 const router = express.Router();
 const redisClient = createClient({
@@ -10,8 +11,28 @@ const redisClient = createClient({
 // Connect to Redis
 redisClient.connect().catch(console.error);
 
-// Dummy data for TransJakarta buses
-const getDummyBusData = () => [
+// Function to get dynamic occupancy using YOLO service
+async function getDynamicOccupancy(): Promise<number> {
+  try {
+    const yoloData = await yoloService.getCurrentOccupancy();
+    if (yoloData && yoloData.status === 'active') {
+      console.log(`🎯 Using YOLO occupancy: ${yoloData.current_inside} people`);
+      return yoloData.current_inside;
+    } else {
+      console.log(`⚠️ YOLO service inactive, using fallback occupancy`);
+      return yoloService.getFallbackOccupancy();
+    }
+  } catch (error) {
+    console.log(`❌ Error getting YOLO occupancy, using fallback: ${error}`);
+    return yoloService.getFallbackOccupancy();
+  }
+}
+
+// Dummy data for TransJakarta buses with dynamic occupancy
+const getDummyBusData = async () => {
+  const dynamicOccupancy = await getDynamicOccupancy();
+  
+  return [
   {
     busId: 'DMR-727',
     busCode: 'DMR-727',
@@ -20,7 +41,7 @@ const getDummyBusData = () => [
     direction: 'Pulo Gadung',
     platform: 'A',
     capacity: 40,
-    occupancy: 39,
+    occupancy: Math.min(32 + dynamicOccupancy, 40), // Base occupancy + YOLO count, max 40
     estimasi: '1 mnt',
     inCount: 23,
     outCount: 16,
@@ -34,10 +55,10 @@ const getDummyBusData = () => [
     busCode: 'MYS-19222',
     routeId: '7F',
     routeName: '7F',
-    direction: 'Pulo Gadung',
+    direction: 'Jakarta Kota',
     platform: 'A',
     capacity: 40,
-    occupancy: 30,
+    occupancy: Math.min(25 + Math.floor(dynamicOccupancy * 0.8), 40), // 25 base + 80% of YOLO count
     estimasi: '1 mnt',
     inCount: 18,
     outCount: 12,
@@ -53,8 +74,8 @@ const getDummyBusData = () => [
     routeName: '2',
     direction: 'Pulo Gadung',
     platform: 'C',
-    capacity: 60,
-    occupancy: 35,
+    capacity: 40,
+    occupancy: Math.min(30 + Math.floor(dynamicOccupancy * 0.6), 40), // 30 base + 60% of YOLO count
     estimasi: '2 mnt',
     inCount: 21,
     outCount: 14,
@@ -68,10 +89,10 @@ const getDummyBusData = () => [
     busCode: 'DMR-240133',
     routeId: '2A',
     routeName: '2A',
-    direction: 'Pulo Gadung',
+    direction: 'Senayan',
     platform: 'B',
     capacity: 40,
-    occupancy: 20,
+    occupancy: Math.min(15 + Math.floor(dynamicOccupancy * 0.4), 40), // 15 base + 40% of YOLO count
     estimasi: '3 mnt',
     inCount: 12,
     outCount: 8,
@@ -85,10 +106,10 @@ const getDummyBusData = () => [
     busCode: 'MYS-17168',
     routeId: '7F',
     routeName: '7F',
-    direction: 'Pulo Gadung',
+    direction: 'Jakarta Kota',
     platform: 'A',
-    capacity: 60,
-    occupancy: 5,
+    capacity: 40,
+    occupancy: Math.min(2 + Math.floor(dynamicOccupancy * 0.3), 40), // 2 base + 30% of YOLO count
     estimasi: '3 mnt',
     inCount: 3,
     outCount: 2,
@@ -97,103 +118,27 @@ const getDummyBusData = () => [
     providerName: 'TransJakarta',
     category: 'Regular'
   }
-];
+  ];
+};
 
 // Get current occupancy for all active buses (MUST BE BEFORE /:busId)
 router.get('/now', async (req: express.Request, res: express.Response) => {
   console.log('=== API ENDPOINT HIT: /api/occupancy/now ===');
   
-  // HARDCODED DATA TO ENSURE IT WORKS
-  const hardcodedData = [
-    {
-      busId: 'DMR-727',
-      busCode: 'DMR-727',
-      routeId: '2',
-      routeName: '2',
-      direction: 'Pulo Gadung',
-      platform: 'A',
-      capacity: 40,
-      occupancy: 39,
-      estimasi: '1 mnt',
-      inCount: 23,
-      outCount: 16,
-      updatedAt: new Date().toISOString(),
-      deviceId: 'device_dmr_727',
-      providerName: 'TransJakarta',
-      category: 'Regular'
-    },
-    {
-      busId: 'MYS-19222',
-      busCode: 'MYS-19222',
-      routeId: '7F',
-      routeName: '7F',
-      direction: 'Jakarta Kota',
-      platform: 'A',
-      capacity: 40,
-      occupancy: 30,
-      estimasi: '1 mnt',
-      inCount: 18,
-      outCount: 12,
-      updatedAt: new Date().toISOString(),
-      deviceId: 'device_mys_19222',
-      providerName: 'TransJakarta',
-      category: 'Regular'
-    },
-    {
-      busId: 'DMR-710',
-      busCode: 'DMR-710',
-      routeId: '2',
-      routeName: '2',
-      direction: 'Pulo Gadung',
-      platform: 'C',
-      capacity: 40,
-      occupancy: 35,
-      estimasi: '2 mnt',
-      inCount: 21,
-      outCount: 14,
-      updatedAt: new Date().toISOString(),
-      deviceId: 'device_dmr_710',
-      providerName: 'TransJakarta',
-      category: 'Regular'
-    },
-    {
-      busId: 'DMR-240133',
-      busCode: 'DMR-240133',
-      routeId: '2A',
-      routeName: '2A',
-      direction: 'Senayan',
-      platform: 'B',
-      capacity: 40,
-      occupancy: 20,
-      estimasi: '3 mnt',
-      inCount: 12,
-      outCount: 8,
-      updatedAt: new Date().toISOString(),
-      deviceId: 'device_dmr_240133',
-      providerName: 'TransJakarta',
-      category: 'Regular'
-    },
-    {
-      busId: 'MYS-17168',
-      busCode: 'MYS-17168',
-      routeId: '7F',
-      routeName: '7F',
-      direction: 'Jakarta Kota',
-      platform: 'A',
-      capacity: 40,
-      occupancy: 5,
-      estimasi: '3 mnt',
-      inCount: 3,
-      outCount: 2,
-      updatedAt: new Date().toISOString(),
-      deviceId: 'device_mys_17168',
-      providerName: 'TransJakarta',
-      category: 'Regular'
-    }
-  ];
-  
-  console.log('RETURNING HARDCODED DATA:', JSON.stringify(hardcodedData, null, 2));
-  return res.json(hardcodedData);
+  try {
+    // Get dynamic bus data with YOLO integration
+    const dynamicBusData = await getDummyBusData();
+    
+    console.log('🎯 RETURNING DYNAMIC DATA WITH YOLO INTEGRATION:', JSON.stringify(dynamicBusData, null, 2));
+    return res.json(dynamicBusData);
+  } catch (error) {
+    console.error('❌ Error getting dynamic bus data:', error);
+    
+    // Fallback to static data if something goes wrong
+    const staticFallback = await getDummyBusData();
+    console.log('⚠️ Using fallback data due to error');
+    return res.json(staticFallback);
+  }
 });
 
 // Debug endpoint to verify server is running our code (MUST BE BEFORE /:busId)
@@ -234,7 +179,8 @@ router.get('/:busId', async (req: express.Request, res: express.Response) => {
     }
 
     // If not found in Redis, check dummy data
-    const dummyBus = getDummyBusData().find(bus => bus.busId === busId);
+    const busData = await getDummyBusData();
+    const dummyBus = busData.find(bus => bus.busId === busId);
     if (dummyBus) {
       return res.json(dummyBus);
     }
@@ -244,7 +190,8 @@ router.get('/:busId', async (req: express.Request, res: express.Response) => {
     console.error('Get occupancy error:', error);
     
     // Fallback to dummy data on error
-    const dummyBus = getDummyBusData().find(bus => bus.busId === busId);
+    const busData = await getDummyBusData();
+    const dummyBus = busData.find(bus => bus.busId === busId);
     if (dummyBus) {
       return res.json(dummyBus);
     }
@@ -377,7 +324,8 @@ router.get('/formatted', async (req: express.Request, res: express.Response) => 
     } else {
       // If no Redis data, format dummy data
       console.log('📋 No Redis data found, returning formatted dummy data');
-      for (const bus of getDummyBusData()) {
+      const busData = await getDummyBusData();
+      for (const bus of busData) {
         formattedData.push({
           formatted: `Rute: ${bus.routeName} | Arah: ${bus.direction} | Peron: ${bus.platform} | Kapasitas: ${bus.occupancy} / ${bus.capacity} | No Bus: ${bus.busId} | Estimasi: ${bus.estimasi}`,
           busId: bus.busId,
@@ -398,7 +346,8 @@ router.get('/formatted', async (req: express.Request, res: express.Response) => 
     console.error('❌ Get formatted data error:', error);
     
     // Fallback to formatted dummy data
-    const formattedData = getDummyBusData().map(bus => ({
+    const busData = await getDummyBusData();
+    const formattedData = busData.map(bus => ({
       formatted: `Rute: ${bus.routeName} | Arah: ${bus.direction} | Peron: ${bus.platform} | Kapasitas: ${bus.occupancy} / ${bus.capacity} | No Bus: ${bus.busId} | Estimasi: ${bus.estimasi}`,
       busId: bus.busId,
       routeName: bus.routeName,
