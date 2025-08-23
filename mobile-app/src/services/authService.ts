@@ -3,7 +3,7 @@ import { LoginRequest, LoginResponse, ApiError } from '../types/api';
 
 // Configure the base URL for your backend
 // Environment variables are automatically loaded from .env file
-const API_HOST = process.env.EXPO_PUBLIC_API_HOST || '192.168.1.21';
+const API_HOST = process.env.EXPO_PUBLIC_API_HOST || 'localhost';
 const API_PORT = process.env.EXPO_PUBLIC_API_PORT || '3001';
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || `http://${API_HOST}:${API_PORT}`;
 

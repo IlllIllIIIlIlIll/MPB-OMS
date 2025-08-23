@@ -43,15 +43,12 @@ export default function App() {
             <Stack.Screen 
               name="MainMenu" 
               component={MainMenuScreen} 
-              options={{ 
-                title: 'TransJakarta Bus Tracker',
-                headerLeft: () => null // Disable back button
-              }}
+              options={{ headerShown: false }}
             />
             <Stack.Screen 
               name="Destination" 
               component={DestinationScreen} 
-              options={{ title: 'Your Destination' }}
+              options={{ headerShown: false }}
             />
           </Stack.Navigator>
         </NavigationContainer>

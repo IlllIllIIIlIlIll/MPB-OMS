@@ -23,6 +23,12 @@ export type Bus = {
   capacity: number;
   route: BusStop[];
   isMoving: boolean;
+  direction: number; // 0 = ascending, 1 = descending
+  speed: number; // Individual bus speed
+  busType?: string; // 'orange', 'red', 'cyan' for different routes
+  routePath?: number[]; // Array of station numbers for the route
+  routeColor?: string; // Color for track code background
+  forecastChange?: number; // Expected passenger change at next station
 };
 
 export type User = {

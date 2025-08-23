@@ -1,567 +1,584 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
-  Dimensions,
-  FlatList,
+  SafeAreaView,
+  StatusBar,
+  Animated,
+  Dimensions
 } from 'react-native';
-import Modal from 'react-native-modal';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList, RouteOptimizationSuggestion } from '../types/navigation';
-import { popularDestinations } from '../data/busStops';
+import { RootStackParamList } from '../types/navigation';
+import JourneyHeader from '../components/JourneyHeader';
 
-type DestinationScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Destination'>;
-type DestinationScreenRouteProp = RouteProp<RootStackParamList, 'Destination'>;
+type DestinationNavigationProp = StackNavigationProp<RootStackParamList, 'Destination'>;
+type DestinationRouteProp = RouteProp<RootStackParamList, 'Destination'>;
 
 const { width, height } = Dimensions.get('window');
 
 const DestinationScreen: React.FC = () => {
-  const [fromLocation, setFromLocation] = useState('');
-  const [toLocation, setToLocation] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [showOptimizationModal, setShowOptimizationModal] = useState(false);
-  const [countdown, setCountdown] = useState(5);
-  const [selectedSuggestion, setSelectedSuggestion] = useState<RouteOptimizationSuggestion | null>(null);
+  const navigation = useNavigation<DestinationNavigationProp>();
+  const route = useRoute<DestinationRouteProp>();
+  const { width } = Dimensions.get('window');
+  const [selectedRoute, setSelectedRoute] = useState<number | null>(null);
+  const [fromLocation, setFromLocation] = useState(route.params?.from || 'My Location');
+  const [toLocation, setToLocation] = useState(route.params?.to || 'Destination');
+  const [showRecommendation, setShowRecommendation] = useState(false);
+  const [bestRoute, setBestRoute] = useState<any>(null);
   
-  const navigation = useNavigation<DestinationScreenNavigationProp>();
-  const route = useRoute<DestinationScreenRouteProp>();
+  // Animation values for smooth interactions
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+  const scaleAnim = useRef(new Animated.Value(0)).current;
+  const progressAnim = useRef(new Animated.Value(1)).current;
+  const routeCardAnims = useRef<Animated.Value[]>([]).current;
 
-  // Mock route optimization suggestions
-  const routeSuggestions: RouteOptimizationSuggestion[] = [
+  // Initialize route card animations
+  useEffect(() => {
+    routeCardAnims.splice(0, routeCardAnims.length);
+    for (let i = 0; i < 4; i++) {
+      routeCardAnims.push(new Animated.Value(0));
+    }
+  }, []);
+
+  // Smooth entrance animation
+  useEffect(() => {
+    // Entrance animations
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Staggered route card animations
+    routeCardAnims.forEach((anim: Animated.Value, index: number) => {
+      setTimeout(() => {
+        Animated.spring(anim, {
+          toValue: 1,
+          tension: 100,
+          friction: 8,
+          useNativeDriver: true,
+        }).start();
+      }, index * 150);
+    });
+
+    // Show route recommendation after animations
+    setTimeout(() => {
+      const best = findBestRoute();
+      setShowRecommendation(true);
+      
+      // Animate progress bar from 100% to 0% over 2.5 seconds
+      progressAnim.setValue(1);
+      Animated.timing(progressAnim, {
+        toValue: 0,
+        duration: 2500,
+        useNativeDriver: false,
+      }).start();
+      
+      // Auto-hide after 2.5 seconds
+      setTimeout(() => {
+        setShowRecommendation(false);
+      }, 2500);
+    }, 1000);
+  }, []);
+
+  const handleBack = () => {
+    // Smooth exit animation
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 50,
+        duration: 300,
+        useNativeDriver: true,
+      }),
+    ]).start(() => {
+      navigation.goBack();
+    });
+  };
+
+  const handleRouteSelect = (routeId: number) => {
+    setSelectedRoute(routeId);
+    
+    // Visual feedback for route selection
+    Animated.sequence([
+      Animated.timing(scaleAnim, {
+        toValue: 0.95,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        tension: 200,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // Sophisticated TransJakarta route scoring algorithm
+  // Prioritizes crowd count over time using logistic functions
+  const calculateRouteScore = (route: any) => {
+    // Parse time to minutes (e.g., "45 minutes" -> 45, "1 hour 15 minutes" -> 75)
+    let totalMinutes = 0;
+    
+    if (route.time.includes('hour')) {
+      const hourMatch = route.time.match(/(\d+)\s*hour/);
+      const minuteMatch = route.time.match(/(\d+)\s*minutes?/);
+      const hours = hourMatch ? parseInt(hourMatch[1]) : 0;
+      const minutes = minuteMatch ? parseInt(minuteMatch[1]) : 0;
+      totalMinutes = hours * 60 + minutes;
+    } else {
+      const minuteMatch = route.time.match(/(\d+)\s*minutes?/);
+      totalMinutes = minuteMatch ? parseInt(minuteMatch[1]) : 0;
+    }
+    
+    // Convert crowd level to load ratio (L)
+    const crowdToLoadRatio: { [key: string]: number } = {
+      'Low': 0.3,      // 30% capacity
+      'Medium': 0.6,   // 60% capacity  
+      'High': 0.85     // 85% capacity (near crush-load)
+    };
+    
+    const loadRatioL = crowdToLoadRatio[route.crowdLevel as string] || 0.6;
+    
+    // Mode factor r (TransJakarta service type)
+    // Assuming mixed BRT/MetroTrans routes
+    const modeR = 0.98; // Average of BRT (1.00) and MetroTrans (0.95)
+    
+    // Preference weight α (how much you care about crowding vs waiting)
+    const alpha = 0.7; // Prioritize comfort over wait time
+    
+    // Algorithm parameters
+    const L0 = 0.75;   // Sharp pain once load >75%
+    const kL = 0.08;   // Crowding sensitivity
+    const T0 = 6;      // Waiting beyond ~6 min starts to feel bad
+    const kT = 2.5;    // Time sensitivity
+    const gamma = 0.35; // Strongly punish near-full vehicles
+    
+    // Logistic function
+    const sigmoid = (x: number) => 1 / (1 + Math.exp(-x));
+    
+    // Calculate penalties
+    const crowdingPenalty = sigmoid((loadRatioL - L0) / kL);
+    const etaPenalty = sigmoid((totalMinutes - T0) / kT);
+    const nearFullKicker = sigmoid((loadRatioL - 0.95) / 0.02);
+    
+    // Final score (0-100, higher = better choice)
+    let score = 100 * modeR * 
+      (1 - (alpha * crowdingPenalty + (1 - alpha) * etaPenalty)) * 
+      (1 - gamma * nearFullKicker);
+    
+    // Clamp to [0, 100]
+    score = Math.max(0, Math.min(100, score));
+    
+    return {
+      ...route,
+      score: score,
+      totalMinutes,
+      loadRatioL,
+      crowdingPenalty,
+      etaPenalty,
+      nearFullKicker
+    };
+  };
+
+  const findBestRoute = () => {
+    const scoredRoutes = mockRoutes.map(calculateRouteScore);
+    
+    // Debug logging
+    console.log('Route Scoring Results:');
+    scoredRoutes.forEach(route => {
+      console.log(`Route ${route.id}: Time=${route.totalMinutes}min, Crowd=${route.crowdLevel}, LoadRatio=${route.loadRatioL.toFixed(2)}, Score=${route.score.toFixed(1)}`);
+    });
+    
+    const best = scoredRoutes.reduce((prev, current) => 
+      prev.score > current.score ? prev : current
+    );
+    
+    console.log(`Best Route Selected: Route ${best.id} with score ${best.score.toFixed(1)}`);
+    setBestRoute(best);
+    return best;
+  };
+
+  const mockRoutes = [
     {
-      routeId: 'route-1',
-      routeName: 'Blok M - Bundaran HI',
-      estimatedOccupancy: 60,
-      estimatedTime: 25,
-      reason: 'Less crowded route with good timing',
+      id: 1,
+      path: ['🚶', '→', '🚌', '1P', '→', '🚶', '→', '🚇', '→', '...'],
+      time: '38 minutes',
+      cost: 'Rp 5000',
+      distance: '16.0 km',
+      isFastest: false,
+      reliability: '95%',
+      crowdLevel: 'High',
     },
     {
-      routeId: 'route-2', 
-      routeName: 'Senayan - Monas',
-      estimatedOccupancy: 45,
-      estimatedTime: 30,
-      reason: 'Optimal route with lowest occupancy',
+      id: 2,
+      path: ['🚶', '→', '🚌', '2P', '→', '🚶', '→', '🚇', '→', '🚌', '3P', '→', '...'],
+      time: '52 minutes',
+      cost: 'Rp 8000',
+      distance: '16.8 km',
+      isFastest: false,
+      reliability: '92%',
+      crowdLevel: 'Low',
     },
     {
-      routeId: 'route-3',
-      routeName: 'Direct Route',
-      estimatedOccupancy: 85,
-      estimatedTime: 20,
-      reason: 'Fastest but more crowded',
+      id: 3,
+      path: ['🚶', '→', '🚌', '4P', '→', '🚶', '→', '...'],
+      time: '1 hour 15 minutes',
+      cost: 'Rp 4000',
+      distance: '17.2 km',
+      isFastest: false,
+      reliability: '88%',
+      crowdLevel: 'Medium',
+    },
+    {
+      id: 4,
+      path: ['🚶', '→', '🚌', '5P', '→', '🚶', '→', '🚇', '→', '🚌', '6P', '→', '🚌', '7P', '→', '...'],
+      time: '1 hour 32 minutes',
+      cost: 'Rp 12000',
+      distance: '17.8 km',
+      isFastest: false,
+      reliability: '85%',
+      crowdLevel: 'Low',
     },
   ];
 
-  // Show modal when screen loads
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setShowModal(true);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, []);
-
-  // Countdown timer for optimization modal
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (showOptimizationModal && countdown > 0) {
-      interval = setInterval(() => {
-        setCountdown(prev => prev - 1);
-      }, 1000);
-    } else if (countdown === 0) {
-      handleOptimizationDecline();
-    }
-    return () => clearInterval(interval);
-  }, [showOptimizationModal, countdown]);
-
-  const handleSubmitDestination = () => {
-    if (!fromLocation || !toLocation) {
-      Alert.alert('Error', 'Please enter both pickup and destination locations');
-      return;
-    }
-
-    setShowModal(false);
-    
-    // Show optimization modal after a short delay
-    setTimeout(() => {
-      setShowOptimizationModal(true);
-      setCountdown(5);
-    }, 1000);
-  };
-
-  const handleOptimizationAccept = () => {
-    setShowOptimizationModal(false);
-    Alert.alert(
-      'Route Optimized!', 
-      `We'll guide you to the best route: ${selectedSuggestion?.routeName || 'Optimized Route'}`,
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
-  };
-
-  const handleOptimizationDecline = () => {
-    setShowOptimizationModal(false);
-    Alert.alert(
-      'Route Set!', 
-      'Taking you to the direct route.',
-      [{ text: 'OK', onPress: () => navigation.goBack() }]
-    );
-  };
-
-  const handleDestinationSelect = (destination: string) => {
-    setToLocation(destination);
-  };
-
-  const getOccupancyColor = (occupancy: number) => {
-    if (occupancy >= 80) return '#FF5722';
-    if (occupancy >= 60) return '#FF9800';
-    if (occupancy >= 40) return '#FFC107';
-    return '#4CAF50';
-  };
-
-  const renderDestinationItem = ({ item }: { item: string }) => (
-    <TouchableOpacity
-      style={styles.destinationItem}
-      onPress={() => handleDestinationSelect(item)}
-    >
-      <Text style={styles.destinationText}>{item}</Text>
-    </TouchableOpacity>
-  );
-
-  const renderSuggestionItem = ({ item }: { item: RouteOptimizationSuggestion }) => (
-    <TouchableOpacity
-      style={[
-        styles.suggestionCard,
-        selectedSuggestion?.routeId === item.routeId && styles.selectedSuggestion
-      ]}
-      onPress={() => setSelectedSuggestion(item)}
-    >
-      <View style={styles.suggestionHeader}>
-        <Text style={styles.suggestionRoute}>{item.routeName}</Text>
-        <View style={[styles.occupancyBadge, { backgroundColor: getOccupancyColor(item.estimatedOccupancy) }]}>
-          <Text style={styles.occupancyText}>{item.estimatedOccupancy}%</Text>
-        </View>
-      </View>
-      <Text style={styles.suggestionTime}>⏱️ {item.estimatedTime} minutes</Text>
-      <Text style={styles.suggestionReason}>{item.reason}</Text>
-    </TouchableOpacity>
-  );
-
   return (
-    <View style={styles.container}>
-      <ScrollView style={styles.content}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.title}>Plan Your Journey</Text>
-          <Text style={styles.subtitle}>Find the best route to your destination</Text>
-        </View>
+    <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#0f172a" />
+      
+      {/* Fixed Header Component */}
+      <JourneyHeader
+        fromLocation={fromLocation}
+        toLocation={toLocation}
+        setFromLocation={setFromLocation}
+        setToLocation={setToLocation}
+        onBack={handleBack}
+      />
 
-        {/* Location Inputs */}
-        <View style={styles.inputSection}>
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>🔵 From</Text>
-            <TextInput
-              style={styles.locationInput}
-              placeholder="Enter pickup location"
-              value={fromLocation}
-              onChangeText={setFromLocation}
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.inputLabel}>🔴 To</Text>
-            <TextInput
-              style={styles.locationInput}
-              placeholder="Enter destination"
-              value={toLocation}
-              onChangeText={setToLocation}
-            />
-          </View>
-        </View>
-
-        {/* Popular Destinations */}
-        <View style={styles.popularSection}>
-          <Text style={styles.popularTitle}>Popular Destinations</Text>
-          <FlatList
-            data={popularDestinations}
-            renderItem={renderDestinationItem}
-            keyExtractor={(item) => item}
-            numColumns={2}
-            scrollEnabled={false}
-          />
-        </View>
-
-        {/* Search Button */}
-        <TouchableOpacity style={styles.searchButton} onPress={handleSubmitDestination}>
-          <Text style={styles.searchButtonText}>🔍 Find Route</Text>
-        </TouchableOpacity>
-      </ScrollView>
-
-      {/* Initial Modal */}
-      <Modal
-        isVisible={showModal}
-        onBackdropPress={() => setShowModal(false)}
-        style={styles.modal}
-      >
-        <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>Where are you going?</Text>
-          <Text style={styles.modalSubtitle}>Let us help you find the best route</Text>
-          
-          <View style={styles.modalInputContainer}>
-            <TextInput
-              style={styles.modalInput}
-              placeholder="From (Current Location)"
-              value={fromLocation}
-              onChangeText={setFromLocation}
-            />
-            <TextInput
-              style={styles.modalInput}
-              placeholder="To (Destination)"
-              value={toLocation}
-              onChangeText={setToLocation}
-            />
-          </View>
-
-          <View style={styles.modalButtons}>
-            <TouchableOpacity 
-              style={styles.modalCancelButton}
-              onPress={() => setShowModal(false)}
-            >
-              <Text style={styles.modalCancelText}>Cancel</Text>
-            </TouchableOpacity>
+      {/* Route Recommendation Modal */}
+      {showRecommendation && bestRoute && (
+        <Animated.View 
+          style={[
+            styles.recommendationModal,
+            {
+              opacity: fadeAnim,
+              transform: [{ translateY: slideAnim }]
+            }
+          ]}
+        >
+          <TouchableOpacity 
+            style={styles.recommendationContent}
+            onPress={() => {
+              setSelectedRoute(bestRoute.id);
+              setShowRecommendation(false);
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.recommendationQuestion}>Wanna take fastest, less crowded route?</Text>
             
-            <TouchableOpacity 
-              style={styles.modalSubmitButton}
-              onPress={handleSubmitDestination}
-            >
-              <Text style={styles.modalSubmitText}>Continue</Text>
-            </TouchableOpacity>
+            {/* Duration Expiry Bar */}
+            <View style={styles.expiryBarContainer}>
+              <View style={styles.expiryBar}>
+                <Animated.View 
+                  style={[
+                    styles.expiryProgress, 
+                    { 
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ['0%', '100%']
+                      }),
+                      backgroundColor: progressAnim.interpolate({
+                        inputRange: [0, 0.5, 1],
+                        outputRange: ['#FF0000', '#FFA500', '#00FF00']
+                      })
+                    }
+                  ]} 
+            />
           </View>
         </View>
-      </Modal>
+        </TouchableOpacity>
+        </Animated.View>
+      )}
 
-      {/* Optimization Modal */}
-      <Modal
-        isVisible={showOptimizationModal}
-        onBackdropPress={handleOptimizationDecline}
-        style={styles.modal}
+      {/* Scrollable Route Cards - SIMPLE AND CLEAN */}
+      <ScrollView 
+        style={styles.routesScrollView}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.routesContent}
       >
-        <View style={styles.optimizationModalContent}>
-          <View style={styles.optimizationHeader}>
-            <Text style={styles.optimizationTitle}>🚀 Route Optimization</Text>
-            <Text style={styles.optimizationSubtitle}>
-              We found better routes with lower occupancy!
+        {mockRoutes.map((route, index) => (
+          <Animated.View 
+            key={route.id} 
+            style={[
+              styles.routeCard,
+              selectedRoute === route.id && styles.selectedRouteCard,
+              {
+                opacity: routeCardAnims[index] || 0,
+                transform: [{
+                  scale: routeCardAnims[index] || 0
+                }]
+              }
+            ]}
+          >
+            <TouchableOpacity 
+              style={styles.routeCardTouchable}
+              onPress={() => handleRouteSelect(route.id)}
+              activeOpacity={0.9}
+            >
+              {/* Route Header with Smart Indicators */}
+              <View style={styles.routeHeader}>
+                <View style={styles.routePath}>
+                  {route.path.map((item, pathIndex) => (
+                    <Text key={pathIndex} style={styles.pathItem}>
+                      {item}
             </Text>
-            <View style={styles.countdownContainer}>
-              <Text style={styles.countdownText}>Auto-decline in {countdown}s</Text>
+                  ))}
             </View>
           </View>
 
-          <FlatList
-            data={routeSuggestions}
-            renderItem={renderSuggestionItem}
-            keyExtractor={(item) => item.routeId}
-            style={styles.suggestionsList}
-            showsVerticalScrollIndicator={false}
-          />
-
-          <View style={styles.optimizationButtons}>
-            <TouchableOpacity 
-              style={styles.declineButton}
-              onPress={handleOptimizationDecline}
-            >
-              <Text style={styles.declineButtonText}>Use Direct Route</Text>
+              {/* Estimated Time - Prominent Display */}
+              <Text style={styles.estimatedTime}>{route.time}</Text>
+              
+              {/* Smart Route Details */}
+              <View style={styles.routeDetails}>
+                <View style={styles.detailRow}>
+                  <View style={styles.costButton}>
+                    <Text style={styles.costText}>{route.cost}</Text>
+                  </View>
+                  <View style={styles.distanceButton}>
+                    <Text style={styles.distanceText}>{route.distance}</Text>
+                  </View>
+                  <View style={styles.statusCircle}>
+                    <View style={[
+                      styles.statusIndicator,
+                      route.crowdLevel === 'High' && styles.statusHigh,
+                      route.crowdLevel === 'Medium' && styles.statusMedium,
+                      route.crowdLevel === 'Low' && styles.statusLow
+                    ]} />
+                  </View>
+                </View>
+              </View>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[
-                styles.acceptButton,
-                !selectedSuggestion && styles.disabledButton
-              ]}
-              onPress={handleOptimizationAccept}
-              disabled={!selectedSuggestion}
-            >
-              <Text style={styles.acceptButtonText}>
-                {selectedSuggestion ? 'Use This Route' : 'Select a Route'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </View>
+          </Animated.View>
+        ))}
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F7FA',
+    backgroundColor: '#0f172a',
   },
-  content: {
+  routesScrollView: {
     flex: 1,
   },
-  header: {
-    padding: 20,
-    backgroundColor: 'white',
+  routesContent: {
+    paddingHorizontal: 20,
+    paddingTop: 40,
+    paddingBottom: 100,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
-  inputSection: {
-    padding: 20,
-    backgroundColor: 'white',
-    marginTop: 10,
-  },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  locationInput: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 16,
-    backgroundColor: '#F9F9F9',
-  },
-  popularSection: {
-    padding: 20,
-    backgroundColor: 'white',
-    marginTop: 10,
-  },
-  popularTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
+  routeCard: {
+    backgroundColor: '#324154',
+    borderRadius: 20,
     marginBottom: 15,
-  },
-  destinationItem: {
-    flex: 1,
-    backgroundColor: '#F0F4FF',
-    borderRadius: 8,
-    padding: 15,
-    margin: 5,
-    alignItems: 'center',
-  },
-  destinationText: {
-    fontSize: 14,
-    color: '#2196F3',
-    fontWeight: '600',
-  },
-  searchButton: {
-    backgroundColor: '#2196F3',
-    borderRadius: 12,
-    padding: 18,
-    margin: 20,
-    alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
-    elevation: 3,
+    elevation: 4,
+    overflow: 'hidden',
   },
-  searchButtonText: {
+  selectedRouteCard: {
+    backgroundColor: '#2A2A2A',
+    borderWidth: 2,
+    borderColor: '#007AFF',
+  },
+  routeCardTouchable: {
+    padding: 20,
+  },
+  routeHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  routePath: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    flex: 1,
+  },
+  pathItem: {
+    fontSize: 16,
     color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
+    marginRight: 8,
   },
-  modal: {
+  estimatedTime: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  routeDetails: {
+    gap: 12,
+  },
+  detailRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  costButton: {
+    backgroundColor: '#FFD700',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    flex: 0,
+    minWidth: 80,
+  },
+  costText: {
+    fontSize: 12,
+    color: 'black',
+    fontWeight: '700',
+    textAlign: 'center',
+  },
+  distanceButton: {
+    backgroundColor: '#475569',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    flex: 0,
+    minWidth: 80,
+  },
+  distanceText: {
+    fontSize: 12,
+    color: 'white',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  reliabilityButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    flex: 1,
+  },
+  reliabilityText: {
+    fontSize: 12,
+    color: 'white',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  crowdButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    flex: 1,
+  },
+  crowdHigh: {
+    backgroundColor: '#FF5722',
+  },
+  crowdMedium: {
+    backgroundColor: '#FF9800',
+  },
+  crowdText: {
+    fontSize: 12,
+    color: 'white',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  statusCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 15,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  modalContent: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 25,
-    width: width * 0.9,
-    maxHeight: height * 0.7,
-  },
-  modalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#333',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  modalSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 25,
-  },
-  modalInputContainer: {
-    marginBottom: 25,
-  },
-  modalInput: {
-    borderWidth: 1,
-    borderColor: '#E0E0E0',
-    borderRadius: 10,
-    padding: 15,
-    fontSize: 16,
-    marginBottom: 15,
-    backgroundColor: '#F9F9F9',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  modalCancelButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#F5F5F5',
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  modalCancelText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
-  modalSubmitButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#2196F3',
-    marginLeft: 10,
-    alignItems: 'center',
-  },
-  modalSubmitText: {
-    fontSize: 16,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  optimizationModalContent: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 20,
-    width: width * 0.95,
-    maxHeight: height * 0.8,
-  },
-  optimizationHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  optimizationTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 8,
-  },
-  optimizationSubtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  countdownContainer: {
-    backgroundColor: '#FFF3E0',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-  },
-  countdownText: {
-    fontSize: 12,
-    color: '#FF9800',
-    fontWeight: '600',
-  },
-  suggestionsList: {
-    maxHeight: height * 0.4,
-    marginBottom: 20,
-  },
-  suggestionCard: {
-    backgroundColor: '#F9F9F9',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  selectedSuggestion: {
-    borderColor: '#2196F3',
-    backgroundColor: '#F0F4FF',
-  },
-  suggestionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  suggestionRoute: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    flex: 1,
-  },
-  occupancyBadge: {
-    borderRadius: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-  },
-  occupancyText: {
-    fontSize: 12,
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  suggestionTime: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 4,
-  },
-  suggestionReason: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-  optimizationButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  declineButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#F5F5F5',
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  declineButtonText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
-  acceptButton: {
-    flex: 1,
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#4CAF50',
-    marginLeft: 10,
-    alignItems: 'center',
-  },
-  disabledButton: {
     backgroundColor: '#E0E0E0',
+    marginLeft: 'auto',
   },
-  acceptButtonText: {
-    fontSize: 16,
-    color: 'white',
+  statusIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  statusHigh: {
+    backgroundColor: '#FF5722',
+  },
+  statusMedium: {
+    backgroundColor: '#FF9800',
+  },
+  statusLow: {
+    backgroundColor: '#4CAF50',
+  },
+  recommendationModal: {
+    position: 'absolute',
+    bottom: 230,
+    left: 20,
+    backgroundColor: 'rgba(255,255,255,1)',
+    borderRadius: 8,
+    padding: 1,
+    width: width * 0.6,
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  recommendationContent: {
+    alignItems: 'center',
+  },
+  recommendationQuestion: {
+    fontSize: 15,
     fontWeight: 'bold',
+    color: 'grey',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  expiryBarContainer: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  expiryBar: {
+    height: '100%',
+    width: '100%',
+    position: 'relative',
+  },
+  expiryProgress: {
+    height: '100%',
+    backgroundColor: '#007AFF',
+    borderRadius: 2,
+    position: 'absolute',
+    left: 0,
+    top: 0,
   },
 });
 
 export default DestinationScreen;
+
+
