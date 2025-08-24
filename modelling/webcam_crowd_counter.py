@@ -11,7 +11,8 @@ def main(source_video_path):
     # 1. SETUP - Inisialisasi Model, Video, dan Tracker
     
     # Inisialisasi model YOLOv8 (akan mengunduh jika belum ada)
-    model = YOLO("yolov8n.pt") 
+    #model = YOLO("yolov8n.pt") 
+    model = YOLO("best_tj_crowd_model.pt")  # model yang sudah dilatih khusus untuk deteksi orang
     
     # Menggunakan kamera real-time jika tidak ada path video yang diberikan
     if source_video_path:
@@ -91,6 +92,83 @@ def main(source_video_path):
     cv2.destroyAllWindows()
     print("Selesai. Video hasil tersimpan di folder 'yolo_results'.")
 
+# ==== CONFIG FORECAST ====
+CAPACITY = 80
+FORECAST_URL = "http://127.0.0.1:8081/forecast"  # sesuaikan port Flask-mu
+DEFAULT_DIRECTION = "BlokM→Kota"  # atau "Kota→BlokM"
+
+STOPS_NB = [
+    "Blok M","ASEAN","Kejaksaan Agung","Masjid Agunng","Bundaran Senayan","Gelora Bung Karno",
+    "Polda Metro Jaya","Bendungan Hilir","Karet","Dukuh Atas 1","Tosari","Bundaran HI ASTRA",
+    "M.H Thamrin","Kebon Sirih","Monumen Nasional","Harmoni","Sawah Besar","Mangga Besar",
+    "Taman Sari","Glodok","Kota","Museum Sejarah Jakarta","Kali Besar"
+]
+STOPS_SB = list(reversed(STOPS_NB))
+
+# pakai requests kalau ada; fallback ke urllib
+try:
+    import requests
+    def http_get(url, params, timeout=3):
+        return requests.get(url, params=params, timeout=timeout).json()
+except Exception:
+    import urllib.parse, urllib.request, json as _json
+    def http_get(url, params, timeout=3):
+        full = url + "?" + urllib.parse.urlencode(params)
+        with urllib.request.urlopen(full, timeout=timeout) as r:
+            return _json.loads(r.read().decode("utf-8"))
+
+class LoadTracker:
+    def __init__(self, cap=80, direction=DEFAULT_DIRECTION):
+        self.cap = cap
+        self.direction = direction
+        self.order = STOPS_NB if direction == "BlokM→Kota" else STOPS_SB
+        self.idx = 0  # index halte saat ini
+        self.load = 0.0          # load setelah halte terakhir yg dikomit
+        self.buf_board = 0       # buffer detected masuk sejak halte aktif
+        self.buf_alight = 0      # buffer detected keluar sejak halte aktif
+
+    def current_stop(self):
+        return self.order[self.idx]
+
+    def on_cross(self, dir_str):
+        # panggil ini dari logika line-crossing kamu
+        if dir_str == "down":   # orang masuk bus
+            self.buf_board += 1
+        elif dir_str == "up":   # orang keluar bus
+            self.buf_alight += 1
+
+    def commit_and_forecast(self):
+        """Panggil saat bus BERANGKAT dari halte (pintu tutup)."""
+        # update load aktual berdasarkan deteksi IoT di halte ini
+        self.load = max(0.0, min(self.cap, self.load + self.buf_board - self.buf_alight))
+        self.buf_board = 0
+        self.buf_alight = 0
+
+        params = {
+            "origin_stop": self.current_stop(),
+            "direction": self.direction,
+            "current_load": str(self.load),
+            "cap": str(self.cap),
+        }
+        try:
+            data = http_get(FORECAST_URL, params, timeout=3)
+            forecasts = data.get("forecasts", [])
+        except Exception as e:
+            print("[forecast] error:", e)
+            forecasts = []
+        return forecasts
+
+    def next_stop(self):
+        self.idx = min(self.idx + 1, len(self.order) - 1)
+        return self.current_stop()
+
+    def switch_direction(self):
+        self.direction = "Kota→BlokM" if self.direction == "BlokM→Kota" else "BlokM→Kota"
+        self.order = STOPS_NB if self.direction == "BlokM→Kota" else STOPS_SB
+        self.idx = 0
+        self.load = 0.0
+        self.buf_board = 0
+        self.buf_alight = 0
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="YOLOv8 Live Crowd Counter")
@@ -98,3 +176,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
     
     main(args.video)
+
+    
