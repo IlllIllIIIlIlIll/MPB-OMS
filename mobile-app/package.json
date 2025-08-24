@@ -12,7 +12,7 @@
     "build:ios": "eas build --platform ios",
     "submit:android": "eas submit --platform android",
     "submit:ios": "eas submit --platform ios",
-    "vercel-build": "npx expo export -p web --output-dir web-build"
+    "vercel-build": "npx expo@~52 export --platform web --non-interactive --output-dir web-build"
   },
   "dependencies": {
     "@expo/metro-runtime": "~4.0.1",
