@@ -15,14 +15,14 @@ const { height, width } = Dimensions.get('window');
 
 // Map coordinates for stations (based on the actual Map.jpg layout)
 const mapStations = [
-  { id: 'stop-1', name: 'Halte Karet', x: 0.96, y: 0.15, type: 'station' },
-  { id: 'stop-2', name: 'Halte Karet Semanggi', x: 0.85, y: 0.33, type: 'station' },
-  { id: 'stop-3', name: 'Halte Senayan', x: 0.53, y: 0.45, type: 'station' },
-  { id: 'stop-4', name: 'Halte Selong', x: 0.20, y: 0.68, type: 'station' },
-  { id: 'stop-5', name: 'Halte Gunung', x: 0.36, y: 0.72, type: 'station' },
-  { id: 'stop-6', name: 'Halte Harmoni', x: 1.1, y: 0.35, type: 'station' },
-  { id: 'stop-7', name: 'Halte Juanda', x: 0.86, y: 0.86, type: 'station' },
-  { id: 'stop-8', name: 'Halte Gambir', x: 0.68, y: 1.03, type: 'station' },
+  { id: 'stop-1', name: 'Halte Karet', x: 0.91, y: 0.15, type: 'station' },
+  { id: 'stop-2', name: 'Halte Karet Semanggi', x: 0.80, y: 0.35, type: 'station' },
+  { id: 'stop-3', name: 'Halte Senayan', x: 0.58, y: 0.45, type: 'station' },
+  { id: 'stop-4', name: 'Halte Selong', x: 0.15, y: 0.75, type: 'station' },
+  { id: 'stop-5', name: 'Halte Gunung', x: 0.29, y: 0.67, type: 'station' },
+  { id: 'stop-6', name: 'Halte Harmoni', x: 1.1, y: 0.395, type: 'station' },
+  { id: 'stop-7', name: 'Halte Juanda', x: 0.79, y: 0.82, type: 'station' },
+  { id: 'stop-8', name: 'Halte Gambir', x: 0.62, y: 1.01, type: 'station' },
 ];
 
 const MainMenuScreen: React.FC = () => {
