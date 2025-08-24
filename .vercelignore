@@ -9,3 +9,7 @@ start-*.bat
 start-*.sh
 setup-*.bat
 setup-*.sh
+
+# Ensure mobile-app always included
+!mobile-app
+!mobile-app/**
