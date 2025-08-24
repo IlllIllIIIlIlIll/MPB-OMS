@@ -204,8 +204,6 @@ crowd_videos/
 *.onnx
 
 # Dataset files
-*.csv
-*.xlsx
 *.parquet
 datasets/
 training_data/
