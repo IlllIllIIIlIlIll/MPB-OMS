@@ -1,0 +1,11 @@
+backend/
+frontend/
+modelling/
+node_modules/
+*.md
+.gitignore
+start-*.ps1
+start-*.bat
+start-*.sh
+setup-*.bat
+setup-*.sh
