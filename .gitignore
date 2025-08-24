@@ -193,7 +193,6 @@ crowd_videos/
 *.hdf5
 *.pkl
 *.pickle
-*.joblib
 *.model
 *.weights
 *.pt
