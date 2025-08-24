@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm install && npm run vercel-build",
-  "outputDirectory": "web-build",
-  "installCommand": "npm install"
+  "buildCommand": "cd mobile-app && npm install && npm run vercel-build",
+  "outputDirectory": "mobile-app/web-build",
+  "installCommand": "cd mobile-app && npm install"
 }
 
