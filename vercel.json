@@ -1,25 +1,6 @@
 {
-  "version": 2,
-  "buildCommand": "cd mobile-app && npm install && npm run vercel-build",
-  "outputDirectory": "mobile-app/web-build",
-  "installCommand": "cd mobile-app && npm install",
-  "builds": [
-    {
-      "src": "mobile-app/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "web-build"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  "buildCommand": "npm run vercel-build",
+  "outputDirectory": "web-build",
+  "installCommand": "npm install"
 }
 
