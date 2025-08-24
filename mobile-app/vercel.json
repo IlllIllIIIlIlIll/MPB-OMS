@@ -1,13 +1,9 @@
 {
-  "buildCommand": "npm install && npm run vercel-build",
+  "framework": "other",
+  "buildCommand": "npm run vercel-build",
   "outputDirectory": "web-build",
   "routes": [
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+    { "handle": "filesystem" },
+    { "src": "/.*", "dest": "/index.html" }
   ]
 }
