@@ -205,11 +205,9 @@ crowd_videos/
 
 # Dataset files
 *.csv
-*.json
 *.xlsx
 *.parquet
 datasets/
-data/
 training_data/
 test_data/
 

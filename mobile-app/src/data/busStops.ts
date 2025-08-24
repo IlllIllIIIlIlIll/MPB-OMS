@@ -1,0 +1,57 @@
+import { BusStop, Bus } from '../types/navigation';
+
+export const busStops: BusStop[] = [
+  { id: 'stop-1', name: 'Halte Karet', latitude: -6.2441, longitude: 106.7991, order: 1 },
+  { id: 'stop-2', name: 'Halte Karet Semanggi', latitude: -6.2441, longitude: 106.7991, order: 2 },
+  { id: 'stop-3', name: 'Halte Senayan', latitude: -6.2441, longitude: 106.7991, order: 3 },
+  { id: 'stop-4', name: 'Halte Selong', latitude: -6.2441, longitude: 106.7991, order: 4 },
+  { id: 'stop-5', name: 'Halte Gunung', latitude: -6.2441, longitude: 106.7991, order: 5 },
+  { id: 'stop-6', name: 'Halte Harmoni', latitude: -6.2441, longitude: 106.7991, order: 6 },
+  { id: 'stop-7', name: 'Halte Juanda', latitude: -6.2441, longitude: 106.7991, order: 7 },
+  { id: 'stop-8', name: 'Halte Gambir', latitude: -6.2441, longitude: 106.7991, order: 8 },
+];
+
+export const initialBuses: Bus[] = [
+  {
+    id: 'bus-1',
+    name: 'TJ 001',
+    currentStopId: 'stop-1',
+    occupancy: 25,
+    capacity: 40,
+    route: [],
+    isMoving: false,
+    direction: 0,
+    speed: 0.3,
+    busType: 'orange',
+    routePath: [1, 2, 3, 4],
+    routeColor: '#FF9800',
+  },
+  {
+    id: 'bus-2',
+    name: 'TJ 002',
+    currentStopId: 'stop-2',
+    occupancy: 35,
+    capacity: 40,
+    route: [],
+    isMoving: false,
+    direction: 1,
+    speed: 0.4,
+    busType: 'red',
+    routePath: [1, 2, 6, 7, 8],
+    routeColor: '#FF5722',
+  },
+  {
+    id: 'bus-3',
+    name: 'TJ 003',
+    currentStopId: 'stop-4',
+    occupancy: 15,
+    capacity: 40,
+    route: [],
+    isMoving: false,
+    direction: 0,
+    speed: 0.35,
+    busType: 'cyan',
+    routePath: [4, 5, 7, 8],
+    routeColor: '#00BCD4',
+  },
+];
