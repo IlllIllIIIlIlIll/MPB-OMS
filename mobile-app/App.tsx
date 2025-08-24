@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 // Import screens
-import LoginScreen from './src/screens/LoginScreen';
 import MainMenuScreen from './src/screens/MainMenuScreen';
 import DestinationScreen from './src/screens/DestinationScreen';
 
@@ -24,7 +23,7 @@ export default function App() {
         <NavigationContainer>
           <StatusBar style="auto" />
           <Stack.Navigator
-            initialRouteName="Login"
+            initialRouteName="MainMenu"
             screenOptions={{
               headerStyle: {
                 backgroundColor: '#2196F3',
@@ -35,11 +34,6 @@ export default function App() {
               },
             }}
           >
-            <Stack.Screen 
-              name="Login" 
-              component={LoginScreen} 
-              options={{ headerShown: false }}
-            />
             <Stack.Screen 
               name="MainMenu" 
               component={MainMenuScreen} 

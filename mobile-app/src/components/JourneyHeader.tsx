@@ -130,17 +130,15 @@ const styles = StyleSheet.create({
     color: 'white',
   },
   backButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
     justifyContent: 'center',
     alignItems: 'center',
   },
   backButtonText: {
-    fontSize: 18,
+    fontSize: 24,
     color: 'white',
-    fontWeight: '600',
+    fontWeight: '400',
   },
   journeyInputs: {
     alignItems: 'stretch',

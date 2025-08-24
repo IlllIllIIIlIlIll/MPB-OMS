@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
   },
   recommendationModal: {
     position: 'absolute',
-    bottom: 230,
+    bottom: 410,
     left: 20,
     backgroundColor: 'rgba(255,255,255,1)',
     borderRadius: 8,
