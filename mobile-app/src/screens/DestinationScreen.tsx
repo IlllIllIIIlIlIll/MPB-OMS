@@ -88,14 +88,14 @@ const DestinationScreen: React.FC = () => {
       progressAnim.setValue(1);
       Animated.timing(progressAnim, {
         toValue: 0,
-        duration: 2500,
+        duration: 5500,
         useNativeDriver: false,
       }).start();
       
       // Auto-hide after 2.5 seconds
       setTimeout(() => {
         setShowRecommendation(false);
-      }, 2500);
+      }, 5500);
     }, 1000);
   }, []);
 
@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,1)',
     borderRadius: 8,
     padding: 1,
-    width: width * 0.6,
+    width: width * 0.8,
     alignItems: 'center',
     zIndex: 9999,
   },
