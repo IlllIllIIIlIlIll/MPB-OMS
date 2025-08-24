@@ -25,7 +25,7 @@
       "package": "com.mpboms.mobile"
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "webpack"
     },
     "plugins": [
       [
