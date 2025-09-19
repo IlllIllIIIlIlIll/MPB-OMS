@@ -1,554 +1,213 @@
-# TransJakarta Occupancy Management System (OMS)
+# 🚌 **TransJakarta Occupancy Management System (OMS)**
 
-A backend-heavy Occupancy Management System designed for TransJakarta operators to monitor real-time bus occupancy. The system integrates with edge devices (Jetson/RPi + Camera) that detect passenger movement and provides a simplified UI focused on displaying occupancy information prominently.
+> **A complete multi-platform solution for real-time bus occupancy monitoring with AI-powered people counting and edge device integration.**
 
-## 🚀 **Quick Start (All OS)**
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React Native](https://img.shields.io/badge/React_Native-20232A?logo=react&logoColor=61DAFB)](https://reactnative.dev/)
+[![Firebase](https://img.shields.io/badge/Firebase-039BE5?logo=Firebase&logoColor=white)](https://firebase.google.com/)
 
-| Operating System | Command | Description |
-|------------------|---------|-------------|
-| **Windows (PowerShell)** | `.\start-all.ps1` | 🎯 **Single command** to start everything |
-| **Windows (CMD)** | `start-all.bat` | 🎯 **Single command** to start everything |
-| **macOS/Linux** | `./start-all.sh` | 🎯 **Single command** to start everything |
+## 🎯 **Quick Start**
 
-### 📋 **What Gets Started:**
-1. **Frontend** (Port 3002) - Bus display dashboard
-2. **Backend** (Port 3001) - API server with YOLO integration  
-3. **YOLO Modelling** (Port 8081) - AI camera service
+### **Single Command Start (Recommended)**
 
-### 🌐 **Access URLs:**
-- **🚌 Bus Display:** http://localhost:3002
-- **📷 Camera:** http://localhost:8081
-- **📊 API:** http://localhost:3001/api/occupancy/now
+| Platform | Command | Description |
+|----------|---------|-------------|
+| **Windows** | `.\scripts\start-all.ps1` | PowerShell script |
+| **Windows** | `scripts\start-all.bat` | Command Prompt |
+| **macOS/Linux** | `./scripts/start-all.sh` | Bash script |
+
+### **Access URLs:**
+- **🚌 Web Dashboard:** http://localhost:3002
+- **📱 Mobile App:** http://localhost:8081
+- **🔧 API:** http://localhost:3001/api/occupancy/now
+- **🤖 AI Service:** http://localhost:8081/api/health
+
+## 🏗️ **System Architecture**
+
+```mermaid
+graph TB
+    subgraph "Edge Layer"
+        A[Webcam/Camera] --> B[AI Detection Service]
+        B --> C[MQTT Broker]
+    end
+    
+    subgraph "Backend Layer"
+        C --> D[Backend API]
+        D --> E[Firebase Firestore]
+        D --> F[Redis Cache]
+    end
+    
+    subgraph "Frontend Layer"
+        G[Web App - Next.js] --> D
+        H[Mobile App - React Native] --> D
+        I[Admin Dashboard] --> D
+    end
+    
+    subgraph "Data Flow"
+        J[Real-time Data] --> K[WebSocket]
+        K --> G
+        K --> H
+    end
+```
+
+## 📁 **Project Structure**
+
+```
+MPB-OMS/
+├── 📱 apps/                          # Applications
+│   ├── web/                          # Next.js Web App
+│   ├── mobile/                       # React Native Mobile App
+│   └── api/                          # Backend API Server
+├── 🤖 services/                      # Microservices
+│   ├── ai-modelling/                 # YOLO AI Service
+│   └── edge-device/                  # Edge Device Integration
+├── 📊 shared/                        # Shared Code
+│   ├── types/                        # TypeScript Types
+│   ├── utils/                        # Shared Utilities
+│   └── config/                       # Configuration
+├── 🗄️ data/                          # Data & Models
+├── 🐳 infrastructure/                # Infrastructure
+├── 📚 docs/                          # Documentation
+├── 🧪 tests/                         # Test Suites
+└── 📋 scripts/                       # Utility Scripts
+```
+
+## 🚀 **Features**
+
+- **🌐 Web Dashboard** - Real-time bus occupancy display for operators
+- **📱 Mobile App** - Cross-platform mobile application for passengers
+- **🤖 AI Detection** - YOLO-based people counting with webcam integration
+- **🔧 Backend API** - RESTful API with real-time WebSocket support
+- **🔥 Firebase Integration** - Real-time database and authentication
+- **📡 Edge Device Ready** - MQTT integration for IoT devices
+
+## 🛠️ **Technology Stack**
+
+### **Frontend**
+- **Web**: Next.js 14, TypeScript, Tailwind CSS
+- **Mobile**: React Native, Expo, TypeScript
+- **UI**: Custom components, responsive design
+
+### **Backend**
+- **API**: Node.js, Express, TypeScript
+- **Database**: Firebase Firestore
+- **Cache**: Redis (optional)
+- **Real-time**: WebSocket, MQTT
+
+### **AI & Detection**
+- **Framework**: Python, Flask
+- **AI**: YOLO v8, OpenCV
+- **Detection**: People counting, occupancy tracking
+
+### **Infrastructure**
+- **Deployment**: Vercel, Firebase Hosting
+- **CI/CD**: GitHub Actions
+- **Monitoring**: Built-in health checks
+
+## 📚 **Documentation**
+
+### **📖 Complete Guides**
+- **[Complete System Guide](docs/COMPLETE_SYSTEM_GUIDE.md)** - Comprehensive system documentation
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design and components
+- **[Project Structure](docs/PROJECT_STRUCTURE.md)** - Detailed project organization
+
+### **🔧 Development**
+- **[Development Setup](docs/DEVELOPMENT.md)** - Development environment setup
+- **[API Documentation](docs/API.md)** - Complete API reference
+- **[Mobile Integration](docs/MOBILE_INTEGRATION.md)** - Mobile app integration
+
+### **🚀 Deployment**
+- **[Deployment Guide](docs/DEPLOYMENT.md)** - Production deployment
+- **[Quick Start](docs/QUICK_START.md)** - Quick start guide
+- **[Setup Guide](docs/SETUP_GUIDE.md)** - Detailed setup instructions
+
+## 🔄 **Data Flow**
+
+### **Real-time Detection**
+```
+Webcam → AI Service → Backend API → Web/Mobile Apps
+```
+
+### **Data Storage**
+```
+Occupancy Data → Firebase Firestore → Real-time Updates
+```
+
+### **User Interface**
+```
+WebSocket → Real-time UI Updates → Live Dashboard
+```
+
+## 🧪 **Testing**
+
+### **Run Tests**
+```bash
+# Backend tests
+cd apps/api && npm test
+
+# Web app tests
+cd apps/web && npm test
+
+# AI service tests
+cd services/ai-modelling && python -m pytest
+```
+
+## 🐛 **Troubleshooting**
+
+### **Common Issues**
+
+1. **Port Already in Use**
+```bash
+# Check ports
+netstat -ano | findstr :3001
+netstat -ano | findstr :3002
+netstat -ano | findstr :8081
+```
+
+2. **AI Service Not Starting**
+```bash
+# Check Python dependencies
+pip install -r requirements.txt
+# Check webcam access
+python -c "import cv2; print(cv2.VideoCapture(0).isOpened())"
+```
+
+3. **Firebase Connection Issues**
+```bash
+# Check environment variables
+echo $FIREBASE_PROJECT_ID
+# Test connection
+npm run test:firebase
+```
+
+## 🤝 **Contributing**
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## 📄 **License**
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 **Acknowledgments**
+
+- **TransJakarta** - For the inspiration and use case
+- **YOLO** - For the computer vision capabilities
+- **Firebase** - For the real-time database
+- **Next.js** - For the web framework
+- **React Native** - For the mobile framework
+
+## 📞 **Support**
+
+- **Issues**: [GitHub Issues](https://github.com/your-repo/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/your-repo/discussions)
+- **Email**: support@transjakarta-oms.com
 
 ---
 
-## 🚀 Complete Infrastructure
-
-### High-Priority Components Implemented ✅
-
-1. **MQTT Broker (EMQX)** - Real-time device communication
-2. **Redis Streams** - Durable message processing
-3. **BullMQ Workers** - Distributed job processing
-4. **Docker Compose** - Complete infrastructure orchestration
-5. **PostgreSQL + TimescaleDB** - Time-series data storage
-
-### System Architecture
-
-```
-[Edge Device per Bus]
- Jetson/RPi + Camera → local IN/OUT → publishes occupancy events (JSON)
-
-            │  MQTT or HTTPS (TLS)
-            ▼
-┌────────────────────────────────────────────────────────────────────┐
-│                         Ingestion & Streams (Node)                 │
-│  1) MQTT Broker (EMQX)  ← fallback HTTPS ingest (Express)        │
-│  2) Ingest Service (Node): subscribe/validate/normalize           │
-│  3) Persist to Redis Streams (XADD) for durable fan‑out           │
-└────────────────────────────────────────────────────────────────────┘
-            │                                  │
-            │ (XREADGROUP)                     │ (XREADGROUP)
-            ▼                                  ▼
-┌───────────────────────────────┐     ┌───────────────────────────────┐
-│ Realtime Aggregator           │     │ Recommendation & Hotspots     │
-│ (Node workers, BullMQ)        │     │ (Node workers, BullMQ)        │
-│ - dedupe, windowed reconcile  │     │ - per-demand recs             │
-│ - upsert "now" cache          │     │ - periodic hotspot precompute │
-└───────────────┬───────────────┘     └───────────────┬───────────────┘
-                │                                     │
-                ▼                                     ▼
-       [Redis Cluster]                         [PostgreSQL/Timescale]
-       - hot cache: occ:now:<bus_id>          - source of truth, history
-       - Pub/Sub for UI pushes                - analytics & reports
-
-                      ▲                                   │
-                      │                                   │
-               WebSocket/SSE                       Batch/retention jobs
-                      │                                   │
-                      ▼                                   ▼
-            Next.js Frontend  ─────→  Node/Express API Gateway
-                    (SSR/CSR)          (/occupancy, /map, /recommendation)
-```
-
-## 🏗️ Infrastructure Components
-
-### 1. MQTT Broker (EMQX)
-- **Port**: 1883 (MQTT), 8883 (MQTT/SSL), 8083 (WebSocket), 18083 (Dashboard)
-- **Topics**: `/oms/v1/occupancy`, `/oms/v1/device/+/status`, `/oms/v1/device/+/heartbeat`
-- **Features**: TLS support, authentication, message persistence
-
-### 2. Redis Streams & Caching
-- **Port**: 6379
-- **Streams**: `stream:occupancy` for real-time processing
-- **Cache**: `occ:now:<bus_id>` for current occupancy
-- **Queues**: BullMQ for job processing
-
-### 3. PostgreSQL Database
-- **Port**: 5432
-- **Database**: `tj_oms`
-- **Extensions**: TimescaleDB for time-series optimization
-- **Schema**: Bus codes, metadata, occupancy logs, devices
-
-### 4. BullMQ Workers
-- **Aggregator Worker**: Processes Redis streams, updates cache
-- **Recommendation Worker**: Analyzes hotspots, generates recommendations
-- **Scheduled Jobs**: Periodic analysis every 60 seconds
-
-## 🚀 Quick Start (All Operating Systems)
-
-### Prerequisites
-- **Node.js 18+** and **npm**
-- **Python 3.8+** (for YOLO modelling)
-- **4GB RAM** minimum (8GB recommended)
-- **10GB disk space**
-
-### 🎯 **Single Command Start (Recommended)**
-
-#### **Windows (PowerShell)**
-```powershell
-# In project root directory
-.\start-all.ps1
-```
-
-#### **Windows (Command Prompt)**
-```cmd
-# In project root directory
-start-all.bat
-```
-
-#### **macOS/Linux**
-```bash
-# In project root directory
-chmod +x start-all.sh
-./start-all.sh
-```
-
-### 🔧 **Manual Start (Alternative)**
-
-#### **1. Clone and Setup**
-```bash
-git clone <repository-url>
-cd MPB-OMS
-```
-
-#### **2. Install Dependencies**
-```bash
-# Backend dependencies
-cd backend
-npm install
-cd ..
-
-# Frontend dependencies  
-cd frontend
-npm install
-cd ..
-
-# Python dependencies (for YOLO)
-cd modelling
-pip install -r requirements.txt
-cd ..
-```
-
-#### **3. Start Services (in separate terminals)**
-
-**Terminal 1 - Backend:**
-```bash
-cd backend
-npm run dev
-```
-
-**Terminal 2 - Frontend:**
-```bash
-cd frontend
-npm run dev
-```
-
-**Terminal 3 - YOLO Modelling:**
-```bash
-cd modelling
-python app.py
-```
-
-### 🚀 **Docker Alternative (Advanced Users)**
-```bash
-# Start all services with Docker
-docker-compose up -d
-
-# Check status
-docker-compose ps
-```
-
-### 3. Initialize Database
-```bash
-# Run database migrations and seed data
-docker-compose exec backend npm run db:push
-docker-compose exec backend npm run db:seed
-```
-
-### 4. Access Services
-
-| Service | URL | Description |
-|---------|-----|-------------|
-| **Frontend Display** | http://localhost:3002 | 🚌 Real-time bus occupancy display |
-| **Backend API** | http://localhost:3001 | 🔧 REST API for occupancy data |
-| **YOLO Camera** | http://localhost:8081 | 📷 AI-powered people counting |
-| **YOLO API** | http://localhost:8081/api/occupancy | 📊 Real-time occupancy count data |
-
-### 🎯 **What Each Service Does**
-
-- **Frontend (Port 3002)**: Displays real-time bus schedules with AI-powered occupancy counts
-- **Backend (Port 3001)**: Provides API endpoints and integrates YOLO occupancy data
-- **YOLO Modelling (Port 8081)**: Computer vision service that counts people entering/exiting
-- **Integration**: Backend fetches real-time occupancy from YOLO and updates bus data automatically
-
-### 5. Test Edge Device Integration
-```bash
-# Simulate edge device message
-mosquitto_pub -h localhost -p 1883 -t "/oms/v1/occupancy" -m '{
-  "bus_id": "TJ-0345",
-  "bus_code": "TJ",
-  "door_id": 1,
-  "in_count": 3,
-  "out_count": 1,
-  "occupancy": 37,
-  "ts_device": "2025-01-15T12:34:56Z",
-  "device_id": "EDGE-A1B2",
-  "fw_version": "1.7.3",
-  "sig": "HMAC_SHA256_BASE64"
-}'
-```
-
-## 🔧 Development Setup
-
-### Local Development (without Docker)
-
-#### 1. Install Dependencies
-```bash
-# Backend
-cd backend
-npm install
-
-# Frontend
-cd frontend
-npm install
-```
-
-#### 2. Setup Infrastructure
-```bash
-# Install Redis
-# macOS: brew install redis
-# Ubuntu: sudo apt-get install redis-server
-
-# Install PostgreSQL
-# macOS: brew install postgresql
-# Ubuntu: sudo apt-get install postgresql
-
-# Install MQTT Broker (EMQX)
-# Download from: https://www.emqx.io/downloads
-```
-
-#### 3. Environment Variables
-```bash
-# Backend .env
-DATABASE_URL="postgresql://postgres:postgres123@localhost:5432/tj_oms"
-REDIS_URL="redis://localhost:6379"
-MQTT_URL="mqtt://localhost:1883"
-JWT_SECRET="your-super-secret-jwt-key"
-```
-
-#### 4. Start Services
-```bash
-# Terminal 1: Backend
-cd backend
-npm run dev
-
-# Terminal 2: Frontend
-cd frontend
-npm run dev
-
-# Terminal 3: Workers
-cd backend
-npm run worker:aggregator
-npm run worker:recommendation
-```
-
-## 📊 API Endpoints
-
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `GET /api/auth/me` - Get current user
-
-### Occupancy Management
-- `GET /api/occupancy/now` - Get current occupancy for all active buses
-- `GET /api/occupancy/:busId` - Get current occupancy for specific bus
-- `GET /api/occupancy/:busId/history` - Get occupancy history for bus
-- `POST /api/occupancy/ingest` - Ingest occupancy data from edge devices
-
-### System Status
-- `GET /health` - Health check with component status
-- `GET /api/system/status` - Detailed system status
-
-### MQTT Topics
-- `/oms/v1/occupancy` - Occupancy events from edge devices
-- `/oms/v1/device/{device_id}/status` - Device status updates
-- `/oms/v1/device/{device_id}/heartbeat` - Device heartbeat
-
-## 🔄 Data Flow
-
-### 1. Edge Device → MQTT → Redis Streams
-```json
-{
-  "bus_id": "TJ-0345",
-  "bus_code": "TJ",
-  "door_id": 1,
-  "in_count": 3,
-  "out_count": 1,
-  "occupancy": 37,
-  "ts_device": "2025-01-15T12:34:56Z",
-  "device_id": "EDGE-A1B2",
-  "fw_version": "1.7.3",
-  "sig": "HMAC_SHA256_BASE64"
-}
-```
-
-### 2. Redis Streams → BullMQ Workers
-- **Aggregator Worker**: Processes streams, updates cache
-- **Recommendation Worker**: Analyzes patterns, generates insights
-
-### 3. Cache → Frontend
-- **Redis Cache**: `occ:now:<bus_id>` for real-time data
-- **WebSocket**: Real-time updates to UI
-
-## 🐳 Docker Commands
-
-### Management
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f
-
-# Stop all services
-docker-compose down
-
-# Rebuild and restart
-docker-compose up -d --build
-
-# Access specific service
-docker-compose exec backend sh
-docker-compose exec postgres psql -U postgres -d tj_oms
-```
-
-### Monitoring
-```bash
-# Check service health
-docker-compose ps
-
-# View resource usage
-docker stats
-
-# Check logs for specific service
-docker-compose logs backend
-docker-compose logs mqtt
-```
-
-## 🔍 Monitoring & Debugging
-
-### MQTT Dashboard
-- **URL**: http://localhost:18083
-- **Default**: admin/public
-- **Features**: Topic monitoring, message inspection, device management
-
-### Redis Commander
-- **URL**: http://localhost:8081
-- **Features**: Stream inspection, cache management, key monitoring
-
-### Database Management
-- **URL**: http://localhost:8080
-- **System**: PostgreSQL
-- **Server**: postgres
-- **Username**: postgres
-- **Password**: postgres123
-- **Database**: tj_oms
-
-## 🚀 Production Deployment
-
-### Environment Variables
-```bash
-# Production .env
-NODE_ENV=production
-DATABASE_URL=postgresql://user:pass@host:5432/tj_oms
-REDIS_URL=redis://host:6379
-MQTT_URL=mqtt://host:1883
-JWT_SECRET=your-production-secret
-```
-
-### Kubernetes Deployment
-```bash
-# Apply Kubernetes manifests
-kubectl apply -f k8s/
-
-# Check deployment status
-kubectl get pods
-kubectl get services
-```
-
-### Scaling
-```bash
-# Scale backend replicas
-kubectl scale deployment oms-backend --replicas=3
-
-# Scale workers
-kubectl scale deployment oms-aggregator --replicas=2
-kubectl scale deployment oms-recommendation --replicas=2
-```
-
-## 🔧 Troubleshooting
-
-### 🚀 **Single Command Start Issues**
-
-1. **PowerShell Execution Policy Error**
-   ```powershell
-   # Run as Administrator, then:
-   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
-   ```
-
-2. **Port Already in Use**
-   ```bash
-   # Windows
-   netstat -ano | findstr :3001
-   netstat -ano | findstr :3002
-   netstat -ano | findstr :8081
-   
-   # macOS/Linux
-   lsof -i :3001
-   lsof -i :3002
-   lsof -i :8081
-   ```
-
-3. **Service Health Check Failed**
-   - Ensure no other instances are running
-   - Check if ports are available
-   - Restart the script: `.\start-all.ps1`
-
-### 🔧 **Manual Start Issues**
-
-1. **Backend Won't Start**
-   ```bash
-   cd backend
-   npm install
-   npm run build
-   npm run dev
-   ```
-
-2. **Frontend Won't Start**
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
-
-3. **YOLO Service Won't Start**
-   ```bash
-   cd modelling
-   pip install -r requirements.txt
-   python app.py
-   ```
-
-### 🐳 **Docker Issues (Advanced Users)**
-
-1. **MQTT Connection Failed**
-   ```bash
-   # Check MQTT broker
-   docker-compose logs mqtt
-   
-   # Test connection
-   mosquitto_pub -h localhost -p 1883 -t "test" -m "hello"
-   ```
-
-2. **Redis Connection Failed**
-   ```bash
-   # Check Redis
-   docker-compose logs redis
-   
-   # Test connection
-   docker-compose exec redis redis-cli ping
-   ```
-
-3. **Database Connection Failed**
-   ```bash
-   # Check PostgreSQL
-   docker-compose logs postgres
-   
-   # Test connection
-   docker-compose exec postgres psql -U postgres -d tj_oms -c "SELECT 1"
-   ```
-
-4. **Workers Not Processing**
-   ```bash
-   # Check worker logs
-   docker-compose logs backend
-   
-   # Check Redis streams
-   docker-compose exec redis redis-cli XINFO STREAM stream:occupancy
-   ```
-
-## 📈 Performance Metrics
-
-### Expected Performance
-- **Latency**: < 100ms for API responses
-- **Throughput**: 1000+ messages/second
-- **Concurrent Users**: 100+ simultaneous connections
-- **Data Retention**: 6 months detailed, 2 years aggregated
-
-### Monitoring
-- **Health Checks**: All services have health endpoints
-- **Metrics**: Prometheus metrics available
-- **Logging**: Structured logging with correlation IDs
-- **Alerts**: High occupancy, device offline, system errors
-
-## 🔐 Security
-
-### Authentication
-- **JWT Tokens**: For API access
-- **Device Signatures**: HMAC-SHA256 for edge devices
-- **MQTT Authentication**: Username/password for devices
-
-### Network Security
-- **TLS/SSL**: For all external communications
-- **Firewall**: Port restrictions and network isolation
-- **VPN**: For remote device management
-
-## 📚 Next Steps
-
-### Phase 2: Kubernetes Deployment
-- [ ] Kubernetes manifests
-- [ ] Helm charts
-- [ ] Service mesh (Istio)
-- [ ] Horizontal pod autoscaling
-
-### Phase 3: Apache Airflow
-- [ ] DAGs for batch processing
-- [ ] Data retention policies
-- [ ] Analytics pipelines
-- [ ] ETL workflows
-
-### Phase 4: Advanced Monitoring
-- [ ] Prometheus metrics
-- [ ] Grafana dashboards
-- [ ] ELK stack for logging
-- [ ] Alert management
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is licensed under the MIT License.
+**Made with ❤️ for TransJakarta and the people of Jakarta**
