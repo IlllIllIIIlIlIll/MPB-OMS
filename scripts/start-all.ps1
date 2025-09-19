@@ -15,20 +15,78 @@ function Test-ServiceHealth {
     )
     
     Write-Host "Waiting for $ServiceName to be ready..." -ForegroundColor Yellow
+    Write-Host "Checking URL: $Url" -ForegroundColor Gray
     
     for ($i = 1; $i -le $MaxAttempts; $i++) {
         try {
+            Write-Host "Attempt $i/$MaxAttempts - Testing $Url..." -ForegroundColor Gray
             $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
+            Write-Host "Response Status: $($response.StatusCode)" -ForegroundColor Gray
             if ($response.StatusCode -eq 200) {
                 Write-Host "$ServiceName is ready!" -ForegroundColor Green
                 return $true
             }
         }
         catch {
-            # Service not ready yet
+            Write-Host "Error on attempt $i`: $($_.Exception.Message)" -ForegroundColor Red
+            Write-Host "Full error: $($_.Exception)" -ForegroundColor DarkRed
         }
         
         Write-Host "Attempt $i/$MaxAttempts - $ServiceName not ready, waiting..." -ForegroundColor Yellow
+        
+        # Enhanced debugging for YOLO service
+        if ($ServiceName -eq "YOLO Modelling Service") {
+            Write-Host "YOLO Service Debug Info:" -ForegroundColor Cyan
+            
+            # Check job status
+            $yoloJob = Get-Job -Name "ModellingJob" -ErrorAction SilentlyContinue
+            if ($yoloJob) {
+                Write-Host "  - Job State: $($yoloJob.State)" -ForegroundColor Gray
+                Write-Host "  - Job HasMoreData: $($yoloJob.HasMoreData)" -ForegroundColor Gray
+                
+                # Show job output if available
+                if ($yoloJob.HasMoreData) {
+                    Write-Host "  - Job output:" -ForegroundColor Gray
+                    $jobOutput = Receive-Job -Name "ModellingJob" -Keep
+                    foreach ($line in $jobOutput) {
+                        Write-Host "    $line" -ForegroundColor DarkGray
+                    }
+                }
+            } else {
+                Write-Host "  - YOLO job not found" -ForegroundColor Red
+            }
+            
+            Write-Host "  - Checking if Python process is running..." -ForegroundColor Gray
+            $pythonProcesses = Get-Process python -ErrorAction SilentlyContinue
+            if ($pythonProcesses) {
+                Write-Host "  - Found $($pythonProcesses.Count) Python process(es)" -ForegroundColor Green
+                foreach ($proc in $pythonProcesses) {
+                    Write-Host "    PID: $($proc.Id), CPU: $($proc.CPU), Memory: $([math]::Round($proc.WorkingSet/1MB, 2))MB" -ForegroundColor Gray
+                }
+            } else {
+                Write-Host "  - No Python processes found" -ForegroundColor Red
+            }
+            
+            Write-Host "  - Checking if port 8081 is listening..." -ForegroundColor Gray
+            $port8081 = Get-NetTCPConnection -LocalPort 8081 -ErrorAction SilentlyContinue
+            if ($port8081) {
+                Write-Host "  - Port 8081 is listening (State: $($port8081.State))" -ForegroundColor Green
+            } else {
+                Write-Host "  - Port 8081 is not listening" -ForegroundColor Red
+            }
+            
+            Write-Host "  - Testing basic connectivity..." -ForegroundColor Gray
+            try {
+                $testConnection = Test-NetConnection -ComputerName localhost -Port 8081 -InformationLevel Quiet
+                if ($testConnection) {
+                    Write-Host "  - Port 8081 is reachable" -ForegroundColor Green
+                } else {
+                    Write-Host "  - Port 8081 is not reachable" -ForegroundColor Red
+                }
+            } catch {
+                Write-Host "  - Port test failed: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
         
         # If checking backend API, also show recent logs
         if ($ServiceName -eq "Backend API" -and (Test-Path "backend.log")) {
@@ -48,6 +106,10 @@ function Test-ServiceHealth {
     }
     
     Write-Host "$ServiceName failed to start within expected time" -ForegroundColor Red
+    Write-Host "Final debug info for $ServiceName`:" -ForegroundColor Red
+    Write-Host "  - URL tested: $Url" -ForegroundColor Red
+    Write-Host "  - Max attempts: $MaxAttempts" -ForegroundColor Red
+    Write-Host "  - Delay between attempts: $DelaySeconds seconds" -ForegroundColor Red
     return $false
 }
 
@@ -109,12 +171,76 @@ try {
     # Step 4: Start YOLO Modelling Service
     Write-Host "Starting YOLO Modelling Service..." -ForegroundColor Blue
     
-    Set-Location "services\ai-modelling"
+    # Check if the YOLO service directory and file exist
+    $yoloDir = "services\ai-modelling"
+    $yoloFile = "services\ai-modelling\simple_app.py"
+    
+    Write-Host "Checking YOLO service setup..." -ForegroundColor Gray
+    if (Test-Path $yoloDir) {
+        Write-Host "  - YOLO directory exists: $yoloDir" -ForegroundColor Green
+    } else {
+        Write-Host "  - YOLO directory missing: $yoloDir" -ForegroundColor Red
+        throw "YOLO service directory not found"
+    }
+    
+    if (Test-Path $yoloFile) {
+        Write-Host "  - YOLO service file exists: $yoloFile" -ForegroundColor Green
+    } else {
+        Write-Host "  - YOLO service file missing: $yoloFile" -ForegroundColor Red
+        throw "YOLO service file not found"
+    }
+    
+    # Check if Python is available
+    Write-Host "Checking Python availability..." -ForegroundColor Gray
+    try {
+        $pythonVersion = python --version 2>&1
+        Write-Host "  - Python version: $pythonVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "  - Python not found or not in PATH" -ForegroundColor Red
+        throw "Python is not available"
+    }
+    
+    # Check if Flask is available
+    Write-Host "Checking Flask availability..." -ForegroundColor Gray
+    try {
+        $flaskCheck = python -c "import flask; print('Flask available')" 2>&1
+        Write-Host "  - $flaskCheck" -ForegroundColor Green
+    } catch {
+        Write-Host "  - Flask not available: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host "  - Installing Flask..." -ForegroundColor Yellow
+        try {
+            pip install flask
+            Write-Host "  - Flask installed successfully" -ForegroundColor Green
+        } catch {
+            Write-Host "  - Failed to install Flask: $($_.Exception.Message)" -ForegroundColor Red
+            throw "Flask installation failed"
+        }
+    }
+    
+    Set-Location $yoloDir
+    Write-Host "Starting YOLO service from: $(Get-Location)" -ForegroundColor Gray
     Start-Job -ScriptBlock { 
         Set-Location $using:PWD
+        Write-Host "YOLO Job: Starting from $(Get-Location)" -ForegroundColor Gray
+        Write-Host "YOLO Job: Running python simple_app.py" -ForegroundColor Gray
         python simple_app.py 
     } -Name "ModellingJob"
     Set-Location "..\.."
+    
+    Write-Host "YOLO service job started. Job details:" -ForegroundColor Gray
+    $yoloJob = Get-Job -Name "ModellingJob"
+    Write-Host "  - Job ID: $($yoloJob.Id)" -ForegroundColor Gray
+    Write-Host "  - Job State: $($yoloJob.State)" -ForegroundColor Gray
+    Write-Host "  - Job HasMoreData: $($yoloJob.HasMoreData)" -ForegroundColor Gray
+    
+    # Show any initial output from the job
+    if ($yoloJob.HasMoreData) {
+        Write-Host "YOLO Job initial output:" -ForegroundColor Cyan
+        $jobOutput = Receive-Job -Name "ModellingJob" -Keep
+        foreach ($line in $jobOutput) {
+            Write-Host "  $line" -ForegroundColor Gray
+        }
+    }
     
     # Step 5: Wait for YOLO service to be ready
     if (-not (Test-ServiceHealth -Url "http://localhost:8081/api/health" -ServiceName "YOLO Modelling Service")) {

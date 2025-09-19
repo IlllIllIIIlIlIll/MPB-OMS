@@ -101,11 +101,11 @@ def stop_detection():
     })
 
 if __name__ == '__main__':
-    print("🚌 Starting TransJakarta YOLO Service...")
-    print("📍 Service will be available at: http://localhost:8081")
-    print("🔍 Health check: http://localhost:8081/api/health")
-    print("📊 Occupancy data: http://localhost:8081/api/occupancy")
-    print("🎯 Mock mode: Generating realistic occupancy data")
+    print("Starting TransJakarta YOLO Service...")
+    print("Service will be available at: http://localhost:8081")
+    print("Health check: http://localhost:8081/api/health")
+    print("Occupancy data: http://localhost:8081/api/occupancy")
+    print("Mock mode: Generating realistic occupancy data")
     print("=" * 50)
     
     app.run(host='0.0.0.0', port=8081, debug=False)
