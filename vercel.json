@@ -1,0 +1,7 @@
+{
+  "outputDirectory": "mobile-app/web-build",
+  "routes": [
+    { "handle": "filesystem" },
+    { "src": "/.*", "dest": "/index.html" }
+  ]
+}

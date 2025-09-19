@@ -10,10 +10,12 @@ import 'express-async-errors';
 // Import routes
 import authRoutes from './routes/auth';
 import occupancyRoutes from './routes/occupancy';
+import adminRoutes from './routes/admin';
 
 // Import services
 import { setupSocketHandlers } from './services/socketService';
 import { startMQTTService } from './services/mqttService';
+import { initializeFirestore } from './services/firestoreService';
 import { startAggregatorWorker } from './workers/aggregatorWorker';
 import { startRecommendationWorker } from './workers/recommendationWorker';
 
@@ -96,6 +98,7 @@ app.get('/status', (req, res) => {
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/occupancy', occupancyRoutes);
+app.use('/api', adminRoutes);
 
 // Log registered routes
 console.log('🛣️ Registered routes:')
@@ -106,6 +109,9 @@ console.log('  - GET /api/occupancy/now')
 console.log('  - GET /api/occupancy/formatted')
 console.log('  - GET /api/occupancy/:busId')
 console.log('  - POST /api/occupancy/ingest')
+console.log('  - GET /api/admin - Admin Panel')
+console.log('  - POST /api/admin/bus - Add Bus')
+console.log('  - POST /api/admin/occupancy - Add Occupancy')
 
 // Add request logging middleware
 app.use((req, res, next) => {
@@ -153,6 +159,10 @@ process.on('SIGINT', gracefulShutdown);
 // Start services
 const startServices = async () => {
   try {
+    // Initialize Firestore
+    console.log('🔥 Initializing Firestore...');
+    await initializeFirestore();
+    
     // Start MQTT service
     console.log('🔌 Starting MQTT service...');
     await startMQTTService();
