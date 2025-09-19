@@ -6,7 +6,10 @@ model = YOLO('yolov8n.pt')
 
 # Latih model dengan dataset kustom Anda
 # Pastikan 'data.yaml' berada di lokasi yang benar
-model.train(data='tj_crowd_dataset/data.yaml', epochs=50, imgsz=640)
+#model.train(data='tj_crowd_dataset/data.yaml', epochs=50, imgsz=640)
 
 # Simpan model yang sudah dilatih
-model.save('best_tj_crowd_model.pt')
+#model.save('best_tj_crowd_model.pt')
+
+res = model.train(data='tj_crowd_dataset/data.yaml', epochs=50, imgsz=640)
+print("Best model:", res.best) 

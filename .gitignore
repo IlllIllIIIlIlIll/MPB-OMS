@@ -193,7 +193,6 @@ crowd_videos/
 *.hdf5
 *.pkl
 *.pickle
-*.joblib
 *.model
 *.weights
 *.pt
@@ -204,8 +203,6 @@ crowd_videos/
 *.onnx
 
 # Dataset files
-*.csv
-*.xlsx
 *.parquet
 datasets/
 training_data/

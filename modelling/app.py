@@ -5,15 +5,60 @@ import base64
 from flask import Flask, render_template_string, request, jsonify
 from ultralytics import YOLO
 import supervision as sv
+import os
+import json, joblib, pandas as pd
+from PIL import Image
+import io, base64
+import numpy as np
+from flask import request, jsonify
+from datetime import datetime
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 6 * 1024 * 1024  # 6MB per request
+
 
 # Initialize YOLO model and tracker
 print("🚀 Loading YOLO model...")
-model = YOLO("yolov8n.pt")  # Will download automatically if not present
-byte_tracker = sv.ByteTrack()
-box_annotator = sv.BoxAnnotator(thickness=2)  # Remove color parameter to use default
+model = YOLO("yolov8n.pt")
 print("✅ YOLO model loaded successfully!")
+
+print("🚀 Loading YOLO model...")
+import os
+best_weight = "best_tj_crowd_model.pt"  # ganti ke path best.pt kamu kalau berbeda
+model = YOLO(best_weight if os.path.exists(best_weight) else "yolov8n.pt")
+print("✅ YOLO model loaded successfully!")
+
+
+
+# ===== Forecasting artifacts (hasil forecast.ipynb) =====
+FORECAST_MODEL_PATH = os.environ.get("MODEL_PATH", "model_load_after_HistGBDT.joblib")
+FEATURES_PATH       = "features.json"          # daftar kolom fitur
+PRIORS_PATH         = "priors_lookup.csv"      # opsional
+STOPS_NB_PATH       = "stops_nb.csv"           # opsional
+STOPS_SB_PATH       = "stops_sb.csv"           # opsional
+
+forecast_model = None
+forecast_features = None
+priors_df = None
+stops_nb = None
+stops_sb = None
+
+try:
+    if os.path.exists(FORECAST_MODEL_PATH):
+        forecast_model = joblib.load(FORECAST_MODEL_PATH)
+    if os.path.exists(FEATURES_PATH):
+        with open(FEATURES_PATH, "r") as f:
+            forecast_features = json.load(f)  # list of column names
+    if os.path.exists(PRIORS_PATH):
+        priors_df = pd.read_csv(PRIORS_PATH)
+    if os.path.exists(STOPS_NB_PATH):
+        stops_nb = pd.read_csv(STOPS_NB_PATH)
+    if os.path.exists(STOPS_SB_PATH):
+        stops_sb = pd.read_csv(STOPS_SB_PATH)
+    print("✅ Forecast artifacts loaded.")
+except Exception as e:
+    print(f"⚠️ cannot load artifacts: {e}")
+
 
 # Line crossing counter variables
 cnt_up = 0  # People going up (entering)
